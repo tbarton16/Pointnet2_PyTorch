@@ -9,7 +9,7 @@ import torch.optim as optim
 import torch.optim.lr_scheduler as lr_sched
 import torch.nn as nn
 from torch.utils.data import DataLoader
-import etw_pytorch_utils as pt_utils
+import etw2.etw_pytorch_utils as pt_utils
 import pprint
 import os.path as osp
 import os
@@ -21,7 +21,7 @@ from pointnet2.data import Indoor3DSemSeg
 
 parser = argparse.ArgumentParser(description="Arg parser")
 parser.add_argument(
-    "-batch_size", type=int, default=32, help="Batch size [default: 32]"
+    "-batch_size", type=int, default=2, help="Batch size [default: 32]"
 )
 parser.add_argument(
     "-num_points",
@@ -29,6 +29,18 @@ parser.add_argument(
     default=4096,
     help="Number of points to train with [default: 4096]",
 )
+parser.add_argument(
+    "-file_train",
+    type = str,
+    default = "/home/theresa/p/v1train.h5",
+    help = ""
+    )
+parser.add_argument(
+    "-file_test",
+    type = str,
+    default = "/home/theresa/p/v1test.h5",
+    help = ""
+    )
 parser.add_argument(
     "-weight_decay",
     type=float,
@@ -83,7 +95,7 @@ bnm_clip = 1e-2
 if __name__ == "__main__":
     args = parser.parse_args()
 
-    test_set = Indoor3DSemSeg(args.num_points, train=False)
+    test_set = Indoor3DSemSeg(args.num_points, args.file_test, train=False)
     test_loader = DataLoader(
         test_set,
         batch_size=args.batch_size,
@@ -92,7 +104,7 @@ if __name__ == "__main__":
         num_workers=2,
     )
 
-    train_set = Indoor3DSemSeg(args.num_points)
+    train_set = Indoor3DSemSeg(args.num_points, args.file_train)
     train_loader = DataLoader(
         train_set,
         batch_size=args.batch_size,
@@ -101,7 +113,7 @@ if __name__ == "__main__":
         shuffle=True,
     )
 
-    model = Pointnet(num_classes=13, input_channels=6, use_xyz=True)
+    model = Pointnet(num_classes=13, input_channels=0, use_xyz=True)
     model.cuda()
     optimizer = optim.Adam(
         model.parameters(), lr=args.lr, weight_decay=args.weight_decay

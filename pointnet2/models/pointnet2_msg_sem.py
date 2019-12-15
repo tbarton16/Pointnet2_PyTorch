@@ -13,6 +13,21 @@ from collections import namedtuple
 from pointnet2.utils.pointnet2_modules import PointnetFPModule, PointnetSAModuleMSG
 
 
+import os
+
+def plot_points(points, scores, name):
+    save_folder = "./generated_shapes_debug/{}".format(name)
+    if not os.path.isdir(save_folder):
+        os.makedirs(save_folder)
+    for batch, cloud in enumerate(points):
+        score = scores[batch]
+        # i = index[batch].item()
+        with open(save_folder + "/{}.csv".format(str(batch)), 'w+') as f:
+            for point_index in range(cloud.shape[0]):
+                f.write("{},{},{},{}\n".format(cloud[point_index, 0], cloud[point_index, 1],
+                                               cloud[point_index, 2], score[point_index].item()))
+
+
 def model_fn_decorator(criterion):
     ModelReturn = namedtuple("ModelReturn", ["preds", "loss", "acc"])
 
@@ -27,6 +42,13 @@ def model_fn_decorator(criterion):
 
             _, classes = torch.max(preds, -1)
             acc = (classes == labels).float().sum() / labels.numel()
+            # print("writing")
+            # print(inputs.shape)
+            inputs = inputs.cpu().numpy()
+            labels = labels.cpu().numpy()
+            classes = classes.cpu().numpy()
+            plot_points(inputs, labels, "target")
+            plot_points(inputs, classes, "preds")
 
         return ModelReturn(preds, loss, {"acc": acc.item(), "loss": loss.item()})
 
@@ -165,9 +187,14 @@ if __name__ == "__main__":
 
     print("Testing with xyz")
     model_fn = model_fn_decorator(nn.CrossEntropyLoss())
-    for _ in range(5):
+    for index in range(5):
         optimizer.zero_grad()
-        _, loss, _ = model_fn(model, (inputs, labels))
+        preds, loss, acc = model_fn(model, (inputs, labels))
+        print(preds.shape)
+        print(inputs.shape)
+        plot_points(inputs, labels,
+                    index, 'target_train')
+        plot_points(inputs, preds, index, 'predict_train')
         loss.backward()
         print(loss.data[0])
         optimizer.step()

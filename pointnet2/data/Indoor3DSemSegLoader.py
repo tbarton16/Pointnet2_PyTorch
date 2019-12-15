@@ -20,16 +20,24 @@ def _get_data_files(list_filename):
     with open(list_filename) as f:
         return [line.rstrip() for line in f]
 
-
+def stack(a, num=5):
+  output = []
+  for i in range(num):
+    output.append(a)
+  return np.array(output)
 def _load_data_file(name):
     f = h5py.File(name)
     data = f["data"][:]
-    label = f["label"][:]
+    label = f["labels"][:]
+    data = data[:,:4096, :]
+    # data = np.array(stack(data))
+    label = label[:,:4096]
+    # label = np.array(stack(label))
     return data, label
 
 
 class Indoor3DSemSeg(data.Dataset):
-    def __init__(self, num_points, train=True, download=True, data_precent=1.0):
+    def __init__(self, num_points, file, train=True, download=True, data_precent=1.0):
         super().__init__()
         self.data_precent = data_precent
         self.folder = "indoor3d_sem_seg_hdf5_data"
@@ -37,49 +45,46 @@ class Indoor3DSemSeg(data.Dataset):
         self.url = (
             "https://shapenet.cs.stanford.edu/media/indoor3d_sem_seg_hdf5_data.zip"
         )
-
-        if download and not os.path.exists(self.data_dir):
-            zipfile = os.path.join(BASE_DIR, os.path.basename(self.url))
-            subprocess.check_call(
-                shlex.split("curl {} -o {}".format(self.url, zipfile))
-            )
-
-            subprocess.check_call(
-                shlex.split("unzip {} -d {}".format(zipfile, BASE_DIR))
-            )
-
-            subprocess.check_call(shlex.split("rm {}".format(zipfile)))
-
+        self.file = file
         self.train, self.num_points = train, num_points
 
-        all_files = _get_data_files(os.path.join(self.data_dir, "all_files.txt"))
-        room_filelist = _get_data_files(
-            os.path.join(self.data_dir, "room_filelist.txt")
-        )
+        # all_files = _get_data_files(os.path.join(self.data_dir, "all_files.txt"))
+        # room_filelist = _get_data_files(
+        #     os.path.join(self.data_dir, "room_filelist.txt")
+        # )
+        #
+        # data_batchlist, label_batchlist = [], []
+        # for f in all_files:
+        #     data, label = _load_data_file(os.path.join(BASE_DIR, f))
+        #     data_batchlist.append(data)
+        #     label_batchlist.append(label)
+        #
+        # data_batches = np.concatenate(data_batchlist, 0)
+        # labels_batches = np.concatenate(label_batchlist, 0)
+        #
+        # test_area = "Area_5"
+        # train_idxs, test_idxs = [], []
+        # for i, room_name in enumerate(room_filelist):
+        #     if test_area in room_name:
+        #         test_idxs.append(i)
+        #     else:overfit
+        #         train_idxs.append(i)
 
-        data_batchlist, label_batchlist = [], []
-        for f in all_files:
-            data, label = _load_data_file(os.path.join(BASE_DIR, f))
-            data_batchlist.append(data)
-            label_batchlist.append(label)
+        data, label = _load_data_file(self.file)
+        # print(data[0][2])
+        # print(label[0][2])
 
-        data_batches = np.concatenate(data_batchlist, 0)
-        labels_batches = np.concatenate(label_batchlist, 0)
+      # todo@tbarton and normalize the data
+      #   data = data - np.expand_dims(np.mean(data, axis=0), 0)  # center
+        mean = data.mean(axis=1)
+        # print(mean.shape)
+        data = data - mean[:, np.newaxis, :]
+        dist = np.max(np.sqrt(np.sum(data ** 2, axis=1)), 0)
+        # print(data.shape)
+        # data = data / dist  # scale
+        self.points = data
+        self.labels = label
 
-        test_area = "Area_5"
-        train_idxs, test_idxs = [], []
-        for i, room_name in enumerate(room_filelist):
-            if test_area in room_name:
-                test_idxs.append(i)
-            else:
-                train_idxs.append(i)
-
-        if self.train:
-            self.points = data_batches[train_idxs, ...]
-            self.labels = labels_batches[train_idxs, ...]
-        else:
-            self.points = data_batches[test_idxs, ...]
-            self.labels = labels_batches[test_idxs, ...]
 
     def __getitem__(self, idx):
         pt_idxs = np.arange(0, self.num_points)
