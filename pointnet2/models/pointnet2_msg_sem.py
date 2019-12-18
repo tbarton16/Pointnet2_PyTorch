@@ -190,7 +190,7 @@ class Pointnet2MSG(nn.Module):
                 l_xyz[i - 1], l_xyz[i], l_features[i - 1], l_features[i]
             )
             # print(l_features[i - 1].shape)
-
+        # print(l_features[0].shape)
         return self.FC_layer(l_features[0]).transpose(1, 2).contiguous()
 
 
