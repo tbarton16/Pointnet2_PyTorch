@@ -112,6 +112,7 @@ class SacredTrainer(object):
 
     def _train_it(self, it, batch):
         self.model.train()
+        print("here")
 
         if self.lr_scheduler is not None:
             self.lr_scheduler.step(it)

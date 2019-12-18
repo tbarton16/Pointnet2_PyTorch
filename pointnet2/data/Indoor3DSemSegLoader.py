@@ -12,10 +12,10 @@ import os
 import h5py
 import subprocess
 import shlex
-
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-
+np.random.seed(10)
+torch.manual_seed(10)
 def _get_data_files(list_filename):
     with open(list_filename) as f:
         return [line.rstrip() for line in f]
@@ -77,11 +77,22 @@ class Indoor3DSemSeg(data.Dataset):
       # todo@tbarton and normalize the data
       #   data = data - np.expand_dims(np.mean(data, axis=0), 0)  # center
         mean = data.mean(axis=1)
-        # print(mean.shape)
+        print(data.shape)
+
+        print(mean.shape)
         data = data - mean[:, np.newaxis, :]
-        dist = np.max(np.sqrt(np.sum(data ** 2, axis=1)), 0)
-        # print(data.shape)
-        # data = data / dist  # scale
+        print("squared", (data ** 2).shape)
+        print((np.sum(data ** 2, axis=1)).shape)
+        var = (np.sqrt(np.sum(data ** 2, axis=1)))
+        dist = np.maximum(var, np.zeros_like(var))
+        print(dist.shape)
+        data = data / dist[:, np.newaxis, :] # scale
+        if not np.all(np.isfinite(data)):
+            print(data)
+            assert False
+        if not np.all(np.isfinite(label)):
+            print(label)
+            assert False
         self.points = data
         self.labels = label
 

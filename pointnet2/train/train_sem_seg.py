@@ -5,15 +5,19 @@ from __future__ import (
     print_function,
     unicode_literals,
 )
+import torch
 import torch.optim as optim
 import torch.optim.lr_scheduler as lr_sched
 import torch.nn as nn
 from torch.utils.data import DataLoader
+import sys
+sys.path.append("/home/tbarton/Pointnet2_PyTorch/")
 import etw2.etw_pytorch_utils as pt_utils
 import pprint
 import os.path as osp
 import os
 import argparse
+torch.manual_seed(0)
 
 from pointnet2.models import Pointnet2SemMSG as Pointnet
 from pointnet2.models.pointnet2_msg_sem import model_fn_decorator
@@ -32,13 +36,13 @@ parser.add_argument(
 parser.add_argument(
     "-file_train",
     type = str,
-    default = "/home/theresa/p/v1train.h5",
+    default = "/home/theresa/datav0train.h5",
     help = ""
     )
 parser.add_argument(
     "-file_test",
     type = str,
-    default = "/home/theresa/p/v1test.h5",
+    default = "/home/theresa/datav0test.h5",
     help = ""
     )
 parser.add_argument(
@@ -48,7 +52,7 @@ parser.add_argument(
     help="L2 regularization coeff [default: 0.0]",
 )
 parser.add_argument(
-    "-lr", type=float, default=1e-2, help="Initial learning rate [default: 1e-2]"
+    "-lr", type=float, default=1e-4, help="Initial learning rate [default: 1e-2]"
 )
 parser.add_argument(
     "-lr_decay",
@@ -78,7 +82,7 @@ parser.add_argument(
     "-checkpoint", type=str, default=None, help="Checkpoint to start from"
 )
 parser.add_argument(
-    "-epochs", type=int, default=200, help="Number of epochs to train for"
+    "-epochs", type=int, default=1000, help="Number of epochs to train for"
 )
 parser.add_argument(
     "-run_name",
@@ -113,7 +117,7 @@ if __name__ == "__main__":
         shuffle=True,
     )
 
-    model = Pointnet(num_classes=13, input_channels=0, use_xyz=True)
+    model = Pointnet(num_classes=2, input_channels=0, use_xyz=True)
     model.cuda()
     optimizer = optim.Adam(
         model.parameters(), lr=args.lr, weight_decay=args.weight_decay
@@ -148,8 +152,8 @@ if __name__ == "__main__":
     )
 
     it = max(it, 0)  # for the initialize value of `trainer.train`
-
-    model_fn = model_fn_decorator(nn.CrossEntropyLoss())
+    weight = torch.tensor([.67, .33])
+    model_fn = model_fn_decorator(nn.CrossEntropyLoss(weight = weight.cuda()))
 
     if args.visdom:
         viz = pt_utils.VisdomViz(port=args.visdom_port)

@@ -15,7 +15,8 @@ import shutil
 import tqdm
 from scipy.stats import t as student_t
 import statistics as stats
-
+torch.manual_seed(0)
+np.random.seed(0)
 
 if False:
     # Workaround for type hints without depending on the `typing` module
@@ -699,17 +700,19 @@ class Trainer(object):
     def _train_it(self, it, batch):
         self.model.train()
 
-        if self.lr_scheduler is not None:
-            self.lr_scheduler.step(it)
-
         if self.bnm_scheduler is not None:
             self.bnm_scheduler.step(it)
+
+
 
         self.optimizer.zero_grad()
         preds, loss, eval_res = self.model_fn(self.model, batch)
 
         loss.backward()
         self.optimizer.step()
+
+        if self.lr_scheduler is not None:
+            self.lr_scheduler.step(it)
 
         return eval_res
 

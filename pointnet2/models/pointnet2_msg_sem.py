@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 import etw_pytorch_utils as pt_utils
 from collections import namedtuple
-
+torch.manual_seed(0)
 from pointnet2.utils.pointnet2_modules import PointnetFPModule, PointnetSAModuleMSG
 
 
@@ -28,6 +28,18 @@ def plot_points(points, scores, name):
                                                cloud[point_index, 2], score[point_index].item()))
 
 
+def isfinite(x):
+    """
+    Quick pytorch test that there are no nan's or infs.
+
+    note: torch now has torch.isnan
+    url: https://gist.github.com/wassname/df8bc03e60f81ff081e1895aabe1f519
+    """
+    not_inf = ((x + 1) != x)
+    not_nan = (x == x)
+    return not_inf & not_nan
+
+
 def model_fn_decorator(criterion):
     ModelReturn = namedtuple("ModelReturn", ["preds", "loss", "acc"])
 
@@ -39,10 +51,19 @@ def model_fn_decorator(criterion):
 
             preds = model(inputs)
             loss = criterion(preds.view(labels.numel(), -1), labels.view(-1))
+            # print(loss)
+            # print("labels:", labels)
+            if not isfinite(loss):
+                print(isfinite(preds))
+                print(preds, labels)
+                # print("inputs:", inputs)
+                assert isfinite(loss)
 
             _, classes = torch.max(preds, -1)
             acc = (classes == labels).float().sum() / labels.numel()
             # print("writing")
+            # print("classes:", classes)
+
             # print(inputs.shape)
             inputs = inputs.cpu().numpy()
             labels = labels.cpu().numpy()
@@ -132,7 +153,7 @@ class Pointnet2MSG(nn.Module):
         self.FC_layer = (
             pt_utils.Seq(128)
             .conv1d(128, bn=True)
-            .dropout()
+            # .dropout()
             .conv1d(num_classes, activation=None)
         )
 
@@ -159,6 +180,7 @@ class Pointnet2MSG(nn.Module):
 
         l_xyz, l_features = [xyz], [features]
         for i in range(len(self.SA_modules)):
+            print(l_xyz[i].shape)
             li_xyz, li_features = self.SA_modules[i](l_xyz[i], l_features[i])
             l_xyz.append(li_xyz)
             l_features.append(li_features)
@@ -167,6 +189,7 @@ class Pointnet2MSG(nn.Module):
             l_features[i - 1] = self.FP_modules[i](
                 l_xyz[i - 1], l_xyz[i], l_features[i - 1], l_features[i]
             )
+            print(l_features[i - 1].shape)
 
         return self.FC_layer(l_features[0]).transpose(1, 2).contiguous()
 
@@ -190,13 +213,13 @@ if __name__ == "__main__":
     for index in range(5):
         optimizer.zero_grad()
         preds, loss, acc = model_fn(model, (inputs, labels))
-        print(preds.shape)
-        print(inputs.shape)
+        # print(preds.shape)
+        # print(inputs.shape)
         plot_points(inputs, labels,
                     index, 'target_train')
         plot_points(inputs, preds, index, 'predict_train')
         loss.backward()
-        print(loss.data[0])
+        # print(loss.data[0])
         optimizer.step()
 
     # with use_xyz=False
