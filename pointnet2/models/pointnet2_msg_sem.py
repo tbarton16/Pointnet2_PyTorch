@@ -180,7 +180,7 @@ class Pointnet2MSG(nn.Module):
 
         l_xyz, l_features = [xyz], [features]
         for i in range(len(self.SA_modules)):
-            print(l_xyz[i].shape)
+            # print(l_xyz[i].shape)
             li_xyz, li_features = self.SA_modules[i](l_xyz[i], l_features[i])
             l_xyz.append(li_xyz)
             l_features.append(li_features)
@@ -189,7 +189,7 @@ class Pointnet2MSG(nn.Module):
             l_features[i - 1] = self.FP_modules[i](
                 l_xyz[i - 1], l_xyz[i], l_features[i - 1], l_features[i]
             )
-            print(l_features[i - 1].shape)
+            # print(l_features[i - 1].shape)
 
         return self.FC_layer(l_features[0]).transpose(1, 2).contiguous()
 

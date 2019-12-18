@@ -152,7 +152,7 @@ if __name__ == "__main__":
     )
 
     it = max(it, 0)  # for the initialize value of `trainer.train`
-    weight = torch.tensor([.67, .33])
+    weight = torch.tensor([.58, .42])
     model_fn = model_fn_decorator(nn.CrossEntropyLoss(weight = weight.cuda()))
 
     if args.visdom:
