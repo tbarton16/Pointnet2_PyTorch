@@ -36,13 +36,13 @@ parser.add_argument(
 parser.add_argument(
     "-file_train",
     type = str,
-    default = "/home/theresa/p/datav1train.h5",
+    default = "/home/theresa/datav1balancedtrain.h5",
     help = ""
     )
 parser.add_argument(
     "-file_test",
     type = str,
-    default = "/home/theresa/p/datav1test.h5",
+    default = "/home/theresa/datav1balancedtest.h5",
     help = ""
     )
 parser.add_argument(

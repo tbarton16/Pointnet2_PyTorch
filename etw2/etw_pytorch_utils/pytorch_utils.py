@@ -716,7 +716,7 @@ class Trainer(object):
 
         return eval_res
 
-    def eval_epoch(self, d_loader):
+    def eval_epoch(self, d_loader,e):
         self.model.eval()
 
         eval_dict = {}
@@ -727,7 +727,7 @@ class Trainer(object):
         ):
             self.optimizer.zero_grad()
 
-            _, loss, eval_res = self.model_fn(self.model, data, eval=True)
+            _, loss, eval_res = self.model_fn(self.model, data, eval=True, epoch = e)
 
             total_loss += loss.item()
             count += 1
@@ -788,7 +788,7 @@ class Trainer(object):
                         pbar.close()
 
                         if test_loader is not None:
-                            val_loss, res = self.eval_epoch(test_loader)
+                            val_loss, res = self.eval_epoch(test_loader,epoch)
 
                             if self.viz is not None:
                                 self.viz.update("val", it, res)

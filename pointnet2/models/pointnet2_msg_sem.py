@@ -15,14 +15,14 @@ from pointnet2.utils.pointnet2_modules import PointnetFPModule, PointnetSAModule
 
 import os
 
-def plot_points(points, scores, name):
+def plot_points(points, scores, name,h):
     save_folder = "./generated_shapes_debug/{}".format(name)
     if not os.path.isdir(save_folder):
         os.makedirs(save_folder)
     for batch, cloud in enumerate(points):
         score = scores[batch]
         # i = index[batch].item()
-        with open(save_folder + "/{}.csv".format(str(batch)), 'w+') as f:
+        with open(save_folder + "/{}.csv".format( str(h+batch)), 'w+') as f:
             for point_index in range(cloud.shape[0]):
                 f.write("{},{},{},{}\n".format(cloud[point_index, 0], cloud[point_index, 1],
                                                cloud[point_index, 2], score[point_index].item()))
@@ -65,11 +65,19 @@ def model_fn_decorator(criterion):
             # print("classes:", classes)
 
             # print(inputs.shape)
-            inputs = inputs.cpu().numpy()
-            labels = labels.cpu().numpy()
-            classes = classes.cpu().numpy()
-            plot_points(inputs, labels, "target")
-            plot_points(inputs, classes, "preds")
+            if not eval and epoch%10 == 0:
+
+                inputs = inputs.cpu().numpy()
+                labels = labels.cpu().numpy()
+                classes = classes.cpu().numpy()
+                plot_points(inputs, labels, "target", epoch)
+                plot_points(inputs, classes, "preds", epoch)
+            if eval:
+                inputs = inputs.cpu().numpy()
+                labels = labels.cpu().numpy()
+                classes = classes.cpu().numpy()
+                plot_points(inputs, labels, "eval_target", epoch)
+                plot_points(inputs, classes, "eval_preds", epoch)
 
         return ModelReturn(preds, loss, {"acc": acc.item(), "loss": loss.item()})
 
@@ -153,7 +161,7 @@ class Pointnet2MSG(nn.Module):
         self.FC_layer = (
             pt_utils.Seq(128)
             .conv1d(128, bn=True)
-            # .dropout()
+            .dropout()
             .conv1d(num_classes, activation=None)
         )
 
@@ -215,9 +223,6 @@ if __name__ == "__main__":
         preds, loss, acc = model_fn(model, (inputs, labels))
         # print(preds.shape)
         # print(inputs.shape)
-        plot_points(inputs, labels,
-                    index, 'target_train')
-        plot_points(inputs, preds, index, 'predict_train')
         loss.backward()
         # print(loss.data[0])
         optimizer.step()

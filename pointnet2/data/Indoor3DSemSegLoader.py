@@ -77,16 +77,16 @@ class Indoor3DSemSeg(data.Dataset):
       # todo@tbarton and normalize the data
       #   data = data - np.expand_dims(np.mean(data, axis=0), 0)  # center
         mean = data.mean(axis=1)
-        print(data.shape)
+        # print(data.shape)
 
-        print(mean.shape)
-        data = data - mean[:, np.newaxis, :]
-        print("squared", (data ** 2).shape)
-        print((np.sum(data ** 2, axis=1)).shape)
+        # print(mean.shape)
+        # data = data - mean[:, np.newaxis, :]
+        # print("squared", (data ** 2).shape)
+        # print((np.sum(data ** 2, axis=1)).shape)
         var = (np.sqrt(np.sum(data ** 2, axis=1)))
         dist = np.maximum(var, np.zeros_like(var))
         print(dist.shape)
-        data = data / dist[:, np.newaxis, :] # scale
+        # data = data / dist[:, np.newaxis, :] # scale
         if not np.all(np.isfinite(data)):
             print(data)
             assert False
