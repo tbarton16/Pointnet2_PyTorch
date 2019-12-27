@@ -29,11 +29,12 @@ def _load_data_file(name):
     f = h5py.File(name)
     data = f["data"][:]
     label = f["labels"][:]
+    index = f["index"][:]
     data = data[:,:4096, :]
     # data = np.array(stack(data))
     label = label[:,:4096]
     # label = np.array(stack(label))
-    return data, label
+    return data, label, index
 
 
 class Indoor3DSemSeg(data.Dataset):
@@ -70,7 +71,7 @@ class Indoor3DSemSeg(data.Dataset):
         #     else:overfit
         #         train_idxs.append(i)
 
-        data, label = _load_data_file(self.file)
+        data, label, index = _load_data_file(self.file)
         # print(data[0][2])
         # print(label[0][2])
 
@@ -95,6 +96,7 @@ class Indoor3DSemSeg(data.Dataset):
             assert False
         self.points = data
         self.labels = label
+        self.index = index
 
 
     def __getitem__(self, idx):
@@ -107,8 +109,9 @@ class Indoor3DSemSeg(data.Dataset):
         current_labels = torch.from_numpy(self.labels[idx, pt_idxs].copy()).type(
             torch.LongTensor
         )
+        current_index = self.index[idx].copy()
 
-        return current_points, current_labels
+        return current_points, current_labels, current_index
 
     def __len__(self):
         return int(self.points.shape[0] * self.data_precent)

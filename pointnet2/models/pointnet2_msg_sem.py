@@ -15,14 +15,14 @@ from pointnet2.utils.pointnet2_modules import PointnetFPModule, PointnetSAModule
 
 import os
 
-def plot_points(points, scores, name,h):
+def plot_points(points, scores, name, epoch, Index = None, use_index = False):
     save_folder = "./generated_shapes_debug/{}".format(name)
     if not os.path.isdir(save_folder):
         os.makedirs(save_folder)
     for batch, cloud in enumerate(points):
         score = scores[batch]
-        # i = index[batch].item()
-        with open(save_folder + "/{}.csv".format( str(h+batch)), 'w+') as f:
+        fname = save_folder + "/{}.csv".format(str(Index[batch].item() if use_index else 2*abs(epoch) + batch))
+        with open(fname, 'w+') as f:
             for point_index in range(cloud.shape[0]):
                 f.write("{},{},{},{}\n".format(cloud[point_index, 0], cloud[point_index, 1],
                                                cloud[point_index, 2], score[point_index].item()))
@@ -43,9 +43,9 @@ def isfinite(x):
 def model_fn_decorator(criterion):
     ModelReturn = namedtuple("ModelReturn", ["preds", "loss", "acc"])
 
-    def model_fn(model, data, epoch=0, eval=False):
+    def model_fn(model, data, epoch=0, eval=False, pfx=""):
         with torch.set_grad_enabled(not eval):
-            inputs, labels = data
+            inputs, labels, index = data
             inputs = inputs.to("cuda", non_blocking=True)
             labels = labels.to("cuda", non_blocking=True)
 
@@ -65,7 +65,13 @@ def model_fn_decorator(criterion):
             # print("classes:", classes)
 
             # print(inputs.shape)
-            if not eval and epoch%10 == 0:
+            if epoch < 0:
+                # inputs = inputs.cpu().numpy()
+                # labels = labels.cpu().numpy()
+                # classes = classes.cpu().numpy()
+                plot_points(inputs, classes, pfx, epoch, index,True)
+
+            elif not eval and epoch%10 == 0:
 
                 inputs = inputs.cpu().numpy()
                 labels = labels.cpu().numpy()
@@ -161,7 +167,7 @@ class Pointnet2MSG(nn.Module):
         self.FC_layer = (
             pt_utils.Seq(128)
             .conv1d(128, bn=True)
-            .dropout()
+            # .dropout()
             .conv1d(num_classes, activation=None)
         )
 
