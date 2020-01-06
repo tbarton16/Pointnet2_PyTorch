@@ -35,8 +35,8 @@ parser.add_argument(
 )
 parser.add_argument(
     "-v",
-    type=str,
-    default="test",
+    type=int,
+    default=2,
     help="Number of points to train with [default: 4096]",
 )
 # parser.add_argument(
@@ -104,10 +104,8 @@ bnm_clip = 1e-2
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    c = args.v.split("/")
-    c = c[-2] + c[-1]
-    file_test = f"/home/theresa/p/{c}test.h5"
-    file_train = f"/home/theresa/p/{c}train.h5"
+    file_test = f"/home/theresa/datav{args.v}balancedtest.h5"
+    file_train = f"/home/theresa/datav{args.v}balancedtrain.h5"
     if not os.path.exists(file_test):
         run(args.v)
     test_set = Indoor3DSemSeg(args.num_points, file_test, train=False)
@@ -176,20 +174,10 @@ if __name__ == "__main__":
     if not osp.isdir("checkpoints"):
         os.makedirs("checkpoints")
 
-    trainer = pt_utils.Trainer(
+    evaluator = pt_utils.Eval(
         model,
-        model_fn,
-        optimizer,
-        checkpoint_name="checkpoints/pointnet2_semseg",
-        best_name="checkpoints/pointnet2_semseg_best",
-        lr_scheduler=lr_scheduler,
-        bnm_scheduler=bnm_scheduler,
-        viz=viz,
+        model_fn
     )
-
-    trainer.train(
-        it, start_epoch, args.epochs, train_loader, test_loader, best_loss=best_loss
-    )
-
-    if start_epoch == args.epochs:
-        _ = trainer.eval_epoch(test_loader)
+    print(len(train_loader),len(test_loader))
+    _ = evaluator.eval_epoch(train_loader,"train_guesses")
+    _ = evaluator.eval_epoch(test_loader,"test_guesses")

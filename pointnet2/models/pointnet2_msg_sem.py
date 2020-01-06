@@ -66,11 +66,8 @@ def model_fn_decorator(criterion):
 
             # print(inputs.shape)
             if epoch < 0:
-                # inputs = inputs.cpu().numpy()
-                # labels = labels.cpu().numpy()
-                # classes = classes.cpu().numpy()
-                plot_points(inputs, classes, pfx, epoch, index,True)
-
+                plot_points(inputs, classes, pfx, epoch, index, True)
+                plot_points(inputs, labels, pfx + "gt", epoch, index, True)
             elif not eval and epoch%10 == 0:
 
                 inputs = inputs.cpu().numpy()
