@@ -86,7 +86,11 @@ class Indoor3DSemSeg(data.Dataset):
         # print((np.sum(data ** 2, axis=1)).shape)
         var = (np.sqrt(np.sum(data ** 2, axis=1)))
         dist = np.maximum(var, np.zeros_like(var))
-        print(dist.shape)
+        if train:
+            print("train", dist.shape)
+        else:
+            print("test", dist.shape)
+
         # data = data / dist[:, np.newaxis, :] # scale
         if not np.all(np.isfinite(data)):
             print(data)

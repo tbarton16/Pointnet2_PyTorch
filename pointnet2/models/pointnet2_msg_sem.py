@@ -15,8 +15,11 @@ from pointnet2.utils.pointnet2_modules import PointnetFPModule, PointnetSAModule
 
 import os
 
-def plot_points(points, scores, name, epoch, Index = None, use_index = False):
-    save_folder = "./generated_shapes_debug/{}".format(name)
+def plot_points(output_folder, points, scores, name, epoch, Index = None, use_index = False):
+    save_folder = f"./generated_shapes_debug/{output_folder}/"
+    if not os.path.isdir(save_folder):
+        os.makedirs(save_folder)
+    save_folder += name
     if not os.path.isdir(save_folder):
         os.makedirs(save_folder)
     for batch, cloud in enumerate(points):
@@ -43,7 +46,7 @@ def isfinite(x):
 def model_fn_decorator(criterion):
     ModelReturn = namedtuple("ModelReturn", ["preds", "loss", "acc"])
 
-    def model_fn(model, data, epoch=0, eval=False, pfx=""):
+    def model_fn(model, data, epoch=0, eval=False, pfx="", results_folder=""):
         with torch.set_grad_enabled(not eval):
             inputs, labels, index = data
             inputs = inputs.to("cuda", non_blocking=True)
@@ -66,21 +69,21 @@ def model_fn_decorator(criterion):
 
             # print(inputs.shape)
             if epoch < 0:
-                plot_points(inputs, classes, pfx, epoch, index, True)
-                plot_points(inputs, labels, pfx + "gt", epoch, index, True)
+                plot_points(results_folder, inputs, classes, pfx, epoch, index, True)
+                plot_points(results_folder, inputs, labels, pfx + "gt", epoch, index, True)
             elif not eval and epoch%10 == 0:
 
                 inputs = inputs.cpu().numpy()
                 labels = labels.cpu().numpy()
                 classes = classes.cpu().numpy()
-                plot_points(inputs, labels, "target", epoch)
-                plot_points(inputs, classes, "preds", epoch)
+                plot_points(results_folder, inputs, labels, "target", epoch)
+                plot_points(results_folder, inputs, classes, "preds", epoch)
             if eval:
                 inputs = inputs.cpu().numpy()
                 labels = labels.cpu().numpy()
                 classes = classes.cpu().numpy()
-                plot_points(inputs, labels, "eval_target", epoch)
-                plot_points(inputs, classes, "eval_preds", epoch)
+                plot_points(results_folder, inputs, labels, "eval_target", epoch)
+                plot_points(results_folder, inputs, classes, "eval_preds", epoch)
 
         return ModelReturn(preds, loss, {"acc": acc.item(), "loss": loss.item()})
 

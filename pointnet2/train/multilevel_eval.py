@@ -11,6 +11,7 @@ import torch.optim.lr_scheduler as lr_sched
 import torch.nn as nn
 from torch.utils.data import DataLoader
 import sys
+from datetime import datetime
 
 sys.path.append("/home/tbarton/Pointnet2_PyTorch/")
 import etw2.etw_pytorch_utils as pt_utils
@@ -36,23 +37,35 @@ parser.add_argument(
     help="Number of points to train with [default: 4096]",
 )
 parser.add_argument(
-    "-v",
+    "-fst",
     type=str,
     default="test",
     help="Number of points to train with [default: 4096]",
 )
-# parser.add_argument(
-#     "-file_train",
-#     type = str,
-#     default = "/home/theresa/datav1balancedtrain.h5",
-#     help = ""
-#     )
-# parser.add_argument(
-#     "-file_test",
-#     type = str,
-#     default = "/home/theresa/datav1balancedtest.h5",
-#     help = ""
-#     )
+parser.add_argument(
+    "-snd",
+    type=str,
+    default="test",
+    help="Number of points to train with [default: 4096]",
+)
+parser.add_argument(
+    "-trd",
+    type=str,
+    default="test",
+    help="Number of points to train with [default: 4096]",
+)
+parser.add_argument(
+    "-data_train",
+    type=str,
+    default="/home/theresa/datav2balancedtrain.h5",
+    help="Number of points to train with [default: 4096]",
+)
+parser.add_argument(
+    "-data_test",
+    type=str,
+    default="/home/theresa/datav2balancedtest.h5",
+    help="Number of points to train with [default: 4096]",
+)
 parser.add_argument(
     "-weight_decay",
     type=float,
@@ -104,13 +117,20 @@ parser.add_argument("--visdom", action="store_true")
 lr_clip = 1e-5
 bnm_clip = 1e-2
 
-if __name__ == "__main__":
-    args = parser.parse_args()
-    c = args.v.split("/")
-    c = c[-2] + c[-1]
-    file_test = f"/home/theresa/p/{c}test.h5"
-    file_train = f"/home/theresa/p/{c}train.h5"
-
+def evaluate_step(args, input_name, input_path, checkpoint_name,
+                  best_checkpoint_name, output_name, file_test = None, file_train = None):
+    # input_name is the directory name in gsd that contains the files that the network must process.
+    # input_path is the full path to the files
+    if file_test and file_train:
+        pass
+    else:
+        file_test = f"generated_shapes_debug/{input_name}test.h5"
+        file_train = f"generated_shapes_debug/{input_name}train.h5"
+        # if not os.path.exists(file_test):
+        # make train and test files
+        run(input_name,
+            inpath=input_path,
+            outpath=f"/home/theresa/Pointnet2_PyTorch/pointnet2/generated_shapes_debug/")
     test_set = Indoor3DSemSeg(args.num_points, file_test, train=False)
     test_loader = DataLoader(
         test_set,
@@ -119,7 +139,6 @@ if __name__ == "__main__":
         pin_memory=True,
         num_workers=2,
     )
-
     train_set = Indoor3DSemSeg(args.num_points, file_train)
     train_loader = DataLoader(
         train_set,
@@ -128,61 +147,58 @@ if __name__ == "__main__":
         num_workers=2,
         shuffle=True,
     )
-
     model = Pointnet(num_classes=2, input_channels=0, use_xyz=True)
     model.cuda()
     optimizer = optim.Adam(
         model.parameters(), lr=args.lr, weight_decay=args.weight_decay
     )
 
-    lr_lbmd = lambda it: max(
-        args.lr_decay ** (int(it * args.batch_size / args.decay_step)),
-        lr_clip / args.lr,
-    )
-    bnm_lmbd = lambda it: max(
-        args.bn_momentum
-        * args.bn_decay ** (int(it * args.batch_size / args.decay_step)),
-        bnm_clip,
+    _ = pt_utils.load_checkpoint(
+        model, optimizer, filename=checkpoint_name.split(".")[0]
     )
 
-    # default value
-    it = -1  # for the initialize value of `LambdaLR` and `BNMomentumScheduler`
-    best_loss = 1e10
-    start_epoch = 1
-
-    # load status from checkpoint
-    checkpoint_name = f"checkpoints/pointnet2_{c}"
-    best_name = f"checkpoints/pointnet2_{c}_best"
-    # checkpoint_name = "checkpoints/" + "pointnet2_semseg.pth.tar"
-    # checkpoint_name = "checkpoints/" + "pointnet2_semseg.pth.tar"
-
-    if args.checkpoint:
-        checkpoint_status = pt_utils.load_checkpoint(
-            model, optimizer, filename=checkpoint_name.split(".")[0]
-        )
-        if checkpoint_status is not None:
-            it, start_epoch, best_loss = checkpoint_status
-
-    lr_scheduler = lr_sched.LambdaLR(optimizer, lr_lambda=lr_lbmd, last_epoch=it)
-    bnm_scheduler = pt_utils.BNMomentumScheduler(
-        model, bn_lambda=bnm_lmbd, last_epoch=it
-    )
-
-    it = max(it, 0)  # for the initialize value of `trainer.train`
     weight = torch.tensor([.58, .42])
     model_fn = model_fn_decorator(nn.CrossEntropyLoss(weight=weight.cuda()))
 
-    if args.visdom:
-        viz = pt_utils.VisdomViz(port=args.visdom_port)
-    else:
-        viz = pt_utils.CmdLineViz()
-
-    viz.text(pprint.pformat(vars(args)))
-
     evaluator = pt_utils.Eval(
         model,
-        model_fn,results_folder=c
+        model_fn,
+        results_folder=output_name
     )
     print(len(train_loader), len(test_loader))
     _ = evaluator.eval_epoch(train_loader, "train_guesses")
     _ = evaluator.eval_epoch(test_loader, "test_guesses")
+
+    # TODO resample points
+
+
+if __name__ == "__main__":
+    # python3 train/multilevel_eval.py -snd 00152020-01-06T08 -trd 00132020-01-06T13
+    tm = datetime.now().isoformat()
+    tm = tm[:-13]
+    args = parser.parse_args()
+    # load initial data and first (fst)
+    # checkpoint_name = "checkpoints/coarsetocoarse/" + "pointnet2_semseg.pth.tar"
+    # best_name = "checkpoints/coarsetocoarse/" + "pointnet2_semseg_best.pth.tar"
+    # evaluate_step(args, "", "", output_name = f"fst_{args.fst}",
+    #               checkpoint_name=checkpoint_name, best_checkpoint_name=best_name, file_test=args.data_test,
+    #               file_train = args.data_train)
+    checkpoint_name = f"checkpoints/pointnet2_{args.snd}.pth.tar"
+    best_name = f"checkpoints/pointnet2_{args.snd}best.pth.tar"
+    input_path = f"/home/theresa/Pointnet2_PyTorch/pointnet2/generated_shapes_debug/fst_{args.fst}/traintest_guesses/"
+    input_path = f"/home/theresa/Pointnet2_PyTorch/pointnet2/generated_shapes_debug/fst_{args.fst}+resampled/"
+    #moving onto second model
+    evaluate_step(args, f"fst_{args.fst}",
+                  input_path,
+                  checkpoint_name=checkpoint_name, best_checkpoint_name=best_name,
+                  output_name = f"snd_{args.snd}")
+
+    # third and final model
+    # checkpoint_name = f"checkpoints/pointnet2_{args.trd}.pth.tar"
+    # best_name = f"checkpoints/pointnet2_{args.trd}best.pth.tar"
+    #
+    # evaluate_step(args, f"snd_{args.snd}",
+    #               f"/home/theresa/Pointnet2_PyTorch/pointnet2/"
+    #               f"generated_shapes_debug/snd_{args.snd}/traintest_guesses/",
+    #               checkpoint_name=checkpoint_name, best_checkpoint_name=best_name,
+    #               output_name = f"trd_{args.trd}")

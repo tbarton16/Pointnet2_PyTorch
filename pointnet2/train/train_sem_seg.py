@@ -180,11 +180,12 @@ if __name__ == "__main__":
         model,
         model_fn,
         optimizer,
-        checkpoint_name="checkpoints/pointnet2_semseg",
-        best_name="checkpoints/pointnet2_semseg_best",
+        checkpoint_name=f"checkpoints/pointnet2_{c}",
+        best_name=f"checkpoints/pointnet2_{c}_best",
         lr_scheduler=lr_scheduler,
         bnm_scheduler=bnm_scheduler,
         viz=viz,
+        results_folder=c
     )
 
     trainer.train(

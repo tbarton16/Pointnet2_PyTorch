@@ -6,6 +6,8 @@ from iglhelpers import *
 import numpy as np
 from numpy import genfromtxt
 import os
+
+#  use eval results to generate next samples. samples are saved to reconstructed seams with file name, v.
 def accuracy(mesh, ind, preds):
     # first calculate diffusion for all the verts, then convert these values to probabilities
     # then sample a bunch of points and keep n_pts of them
@@ -142,11 +144,14 @@ def sample_mesh(mesh, n_pts, gamma, output):
 
 
 def resample_directory(d, o, m, exclusion_list):
+    precisions = []
+    accs = []
     if not os.path.exists(o):
         os.mkdir(o)
     for i,f in enumerate(os.listdir(d)[:]):
         infile = os.path.join(d, f)
         num, _ = f.split(".")
+        print(num)
         numpad = num
         if int(num) in exclusion_list:
             continue
@@ -158,28 +163,40 @@ def resample_directory(d, o, m, exclusion_list):
         mfile = os.path.join(m, num + ".obj")
 
         try:
-
+            p =  precision(mfile, numpad, infile)
+            precisions.append(p)
+            a = accuracy(mfile, numpad, infile)
+            accs.append(a)
             sample_mesh(mfile, 4096, infile, outfile)
-            print("precision: ", precision(mfile, numpad, infile))
-            print("accuracy: ", accuracy(mfile, numpad, infile))
+            print("precision: ",p)
+            print("accuracy: ", a)
         except:
             pass
+    return precisions, accs
 
 
 if __name__ == "__main__":
-    from datetime import datetime
-
-    # Add code to modify contents of geo.
-    # Use drop down menu to select examples.
-    tm = datetime.now().isoformat()
-    tm = tm[:-13]
-    # print(precision("/home/theresa/p/datav5_obj/081.obj", 81,
-    #                 "/home/theresa/Pointnet2_PyTorch/generated_shapes_debug/train_guessesgt/81.csv"))
-    print("TRAIN")
-    resample_directory("/home/theresa/Pointnet2_PyTorch/generated_shapes_debug/train_guesses",
-                  "/home/theresa/Pointnet2_PyTorch/reconstructed_seams/train_output",
-                  "/home/theresa/p/datav5_obj", [5,111,112, 42, 83,128])
+    v = str(sys.argv[1])
+    train_predicted_path = f"/home/theresa/Pointnet2_PyTorch/pointnet2/generated_shapes_debug/{v}/train_guesses"
+    test_predicted_path = f"/home/theresa/Pointnet2_PyTorch/pointnet2/generated_shapes_debug/{v}/test_guesses"
+    meshes = "/home/theresa/p/datav5_obj"
+    train_output = f"/home/theresa/Pointnet2_PyTorch/pointnet2/generated_shapes_debug/{v}+resampled/"
+    test_output = f"/home/theresa/Pointnet2_PyTorch/pointnet2/generated_shapes_debug/{v}+resampled/"
+    if not os.path.isdir(train_output):
+        os.makedirs(train_output)
+    # train_output += "train_resampled"
+    # test_output += "test_resampled"
+    if not os.path.isdir(test_output):
+        os.makedirs(test_output)
+   # if not os.path.isdir(test_output):
+   #    os.makedirs(test_output)
     print("TEST")
-    resample_directory("/home/theresa/Pointnet2_PyTorch/generated_shapes_debug/test_guesses",
-                  "/home/theresa/Pointnet2_PyTorch/reconstructed_seams/test_output",
-                  "/home/theresa/p/datav5_obj", [])
+    testp, testa = resample_directory(test_predicted_path,
+                                      train_output,
+                                      meshes, [128])
+    print("TRAIN")
+    trainp, traina = resample_directory(train_predicted_path, train_output,
+                  meshes, [0, 5, 83, 112, 173, 191])
+
+    print("train:", np.average(trainp), np.average(traina))
+    print("test:", np.average(testp), np.average(testa))
