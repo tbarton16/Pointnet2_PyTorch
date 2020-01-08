@@ -124,7 +124,7 @@ def sample_mesh(mesh, n_pts, gamma, output):
     results /= max(results)
     pts = []
     counter = 0
-    while len(pts)< n_pts:
+    while len(pts) < n_pts:
         if counter > 20:
             print("abandoning")
             return
@@ -189,21 +189,28 @@ def facetoface(f):
     print([i.face for i in idxtofacenn[3].neighbors])
     return idxtofacenn
 
-def facetopoints(points, v, f):
-    gamma = genfromtxt(points, dtype=np.float64, delimiter=",")
-    # gamma = np.asarray([[0.,0.1,0.,0], [0.,0.5,0.,1]], dtype=np.float64)
-    pointsonly = np.array([list(g[:-1]) for g in gamma])
-    #print(pointsonly)
+def facetopoints(points, v, f, sampled_points=None):
+    if points:
+        gamma = genfromtxt(points, dtype=np.float64, delimiter=",")
+        # gamma = np.asarray([[0.,0.1,0.,0], [0.,0.5,0.,1],  [0., 0.6, 0., 1]], dtype=np.float64)
+        pointsonly = np.array([list(g[:-1]) for g in gamma])
+
+    else:
+        gamma = sampled_points
+        pointsonly = np.array([list(g[:3]) for g in gamma])
     # ig.write_triangle_mesh("testmesh.obj", v, f)
     _, prims, _ = ig.point_mesh_squared_distance(pointsonly, v, f)
     ftop = {}
+    pointstoface = {}
     # print("idx, face", prims[0], f[prims[0]])
-    for fi, z in zip(prims.tolist(), gamma):
+    for idx, fiz in enumerate(zip(prims.tolist(), gamma)):
+        fi, z = fiz
         if fi in ftop:
             ftop[fi].append(z)
         else:
             ftop[fi] = [z]
-    return ftop
+        pointstoface[idx] = [fi]
+    return ftop, pointstoface
 
 def verttoface(f):
     # Map from vertex idx to faces it is a part of
@@ -217,64 +224,103 @@ def verttoface(f):
     return v2f
 
 
-def vert_knn(mesh, n_pts, gamma, output, k = 5):
+def mesh_knn(mesh, n_pts, gamma, output, k):
+    # for mesh with predictions gamma if point type is vertex, calculate the knn for each vertex
+    # if point type is random, use gamma to calculate knn for passed in points
     v, f = ig.read_triangle_mesh(mesh)
+
     # v = np.asarray([[0, 2, 0], [1, 1, 0], [-1, 1, 0], [1, 2, 0], [-1, 3, 0], [0, 0, 0]], dtype=np.float64)
     # f = np.asarray([[3, 2, 6], [3, 1, 2], [1, 4, 2], [1, 5, 4]], dtype=np.int32)
     # f = np.asarray([[i-1 for i in p] for p in f], dtype=np.int32)
-    # # print(v, f)
-    ftop = facetopoints(gamma, v, f)
+
+    # map faces to points
+    ftop, _ = facetopoints(gamma, v, f)
     idxtofacenn = facetoface(f)
-    v2f = verttoface(f)
-    labeledverts = [] # mapping from vertex index to faces
-    for i, verts in enumerate(v):
+    # if point_type == "vertex":
+    #     # mapping from vertex index to faces
+    #     v2f = verttoface(f)
+    #     poi = v
+    # elif point_type == "random":
+    pts = []
+    while len(pts) < n_pts:
+        Bary, FI = ig.random_points_on_mesh(n_pts, v, f)
+        ws_points = []
+        pointstoface = {}
+        for idx, bf in enumerate(zip(Bary, FI)):
+            b, face = bf
+            verts = [v[i] for i in f[face]]
+            pt = sum([float(b[i]) * verts[i] for i in range(len(verts))])
+            ws_points.append(pt)
+            pointstoface[idx]=[face]
+        # ws_points = np.asarray([[0., 0.1, 0.], [0., 0.5, 0.]], dtype=np.float64)
+        labeled_verts = vert_knn(ftop, idxtofacenn, pointstoface, ws_points, k=5)
+        # _, pointstoface = facetopoints(None, v, f, sampled_points)
+        # gamma = np.asarray([[0., 0.1, 0.], [0., 0.5, 0.]], dtype=np.float64)
+        for vert in labeled_verts:
+            if vert
+    np.savetxt(output, np.asarray(labeled_verts), delimiter=",")
+
+
+def vert_knn(ftop, idxtofacenn, v2f, sampled_points, k=5,seam_threshold=0):
+
+    labeled_verts = []
+    for i, verts in enumerate(sampled_points):# TODO keep track of visited verts
+        # Check my prim first
         fringe = v2f[i]
-        closepoints = []
-        # print("fringe", fringe)
-        while len(closepoints) < k:
-            points =[]
+        close_points = []
+        visited_prims = [f for f in fringe]
+        while len(close_points) < k and len(fringe) != 0:
+            points = []
             for p in fringe:
+                # no points on prim
                 if p not in ftop:
-                    continue # no points on prim
+                    continue
                 for pt in ftop[p]:
                     points.append(pt)
 
-            if len(points) < k-len(closepoints):
-                closepoints += points
+            if len(points) < k-len(close_points):
+                close_points += points
             else:
+                # add all the points on the fringe to the points in sorted order
                 points = sorted(points, key=lambda x: np.linalg.norm(np.asarray(x[:-1])- np.asarray(verts)))
-                closepoints += points[:k-len(closepoints)]
-            newfringe = []
+                close_points += points[:k-len(close_points)]
+            new_fringe = []
 
             for p in fringe:
                 for n in idxtofacenn[p].neighbors:
-                    newfringe.append(n.face)
-            fringe = newfringe
-        tot = sum([np.linalg.norm(np.asarray(x[:-1])- np.asarray(verts)) for x in closepoints])
+                    if n.face not in visited_prims:
+                        new_fringe.append(n.face)
+                        visited_prims.append(n.face)
+            fringe = new_fringe
+
+        tot = sum([np.linalg.norm(np.asarray(x[:-1]) - np.asarray(verts)) for x in close_points])
         weight = 0.
-        # print("closest", closepoints)
-        for pt in closepoints:
-            d = np.linalg.norm(np.asarray(pt[:-1])- np.asarray(verts))
-            # print("d",float(tot))
-            weight += pt[3] * (1.-(d/float(tot)))
-        if weight < .8:
-            weight = 0.
+        yeses = 0
+        nos = 0
+        # print("for", verts, tot)
+        for pt in close_points: # TODO weight special for sparse pts or max radius
+            if pt[3] == 0.:
+                yeses += 1
+            else:
+                nos+=1
+            # print("for", pt, )
+            # d = np.linalg.norm(np.asarray(pt[:-1])- np.asarray(verts))
+            # print("distance", d, "d/t", (d / float(tot)), "weight=", 1-(d/float(tot)))
+            # weight += pt[3] * (1. - (d / float(tot)))
+            # print("total weight", weight)
+        # print("-----")
+        cls = 0. if yeses > nos else 1
+        # seam threshold: scores lower mapped to zero
+        # if weight < seam_threshold:
+        #     weight = 0.
         verts = verts.tolist()
-        verts.append(weight)
-        labeledverts.append(np.asarray(verts))
-    # print(labeledverts)
+        verts.append(cls)
+        labeled_verts.append(np.asarray(verts))
+
+    # print(labeled_verts)
     # import time
     # time.sleep(10)
-
-    np.savetxt(output, np.asarray(labeledverts), delimiter=",")
-
-
-
-
-
-
-
-
+    return labeled_verts
 
 
 def resample_directory(d, o, m, exclusion_list):
@@ -302,7 +348,7 @@ def resample_directory(d, o, m, exclusion_list):
             # precisions.append(p)
             # a = accuracy(mfile, numpad, infile)
             # accs.append(a)
-        vert_knn(mfile, 4096, infile, outfile)
+        mesh_knn(mfile, 4096, infile, outfile, k=5)
             # print("precision: ",p)
             # print("accuracy: ", a)
         # except:
