@@ -57,13 +57,13 @@ parser.add_argument(
 parser.add_argument(
     "-data_train",
     type=str,
-    default="/home/theresa/datav2balancedtrain.h5",
+    default="/home/theresa/p/datav2balancedtrain.h5",
     help="Number of points to train with [default: 4096]",
 )
 parser.add_argument(
     "-data_test",
     type=str,
-    default="/home/theresa/datav2balancedtest.h5",
+    default="/home/theresa/p/datav2balancedtest.h5",
     help="Number of points to train with [default: 4096]",
 )
 parser.add_argument(

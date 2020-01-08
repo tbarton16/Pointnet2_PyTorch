@@ -205,28 +205,30 @@ train = [1,
          202]
 
 
-def read_point_cloud(filename, stats, has_labels):
+def read_point_cloud(filename, stats):
+
     points, distances = [], []
+
     with open(filename, "r") as f:
         reader = csv.reader(f)
         dists = []
+
         for row in reader:
-            if has_labels:
-                point = [float(element) for element in row[:-1]]
-                distance = float(row[-1])
-            else:
-                point = [float(element) for element in row[:]]
-                distance = float(0)
-            # print(distance)
+            point = [float(element) for element in row[:-1]]
+            distance = float(row[-1])
+
+            # if len(point) != 3:
+            #     print(filename, len(point))
             points.append(point)
             distances.append(distance)
             dists.append(distance)
-        # print(filename[-7:], len(list(filter((lambda x: x == 0.), dists))) / float(len(dists)) )
+
         stats.append(len(list(filter((lambda x: x == 0.), dists))) / float(len(dists)))
+
     return np.array(points), np.array(distances), stats
 
 
-def read_n_point_clouds(d, has_labels):
+def read_n_point_clouds(d):
     overall_points, overall_distances, index_names_train = [], [], []
     test_points, test_distances, index_names_test = [], [], []
     stats = []
@@ -240,20 +242,21 @@ def read_n_point_clouds(d, has_labels):
 
             if file_index in train:
                 # for fi in os.listdir(sub):
-                points, distances, stats = read_point_cloud(filename, stats, has_labels)
+                points, distances, stats = read_point_cloud(filename, stats)
                 file_index = int(name)
                 overall_points.append(points[:npoints])
                 overall_distances.append(distances[:npoints])
                 index_names_train.append(file_index)
             else:
                 # for fi in os.listdir(sub):
-                points, distances, stats = read_point_cloud(filename, stats, has_labels)
+                points, distances, stats = read_point_cloud(filename, stats)
                 file_index = int(name)
                 test_points.append(points[:npoints])
                 test_distances.append(distances[:npoints])
                 index_names_test.append(file_index)
+
     print("stats:", sum(stats) / float(len(stats)), min(stats), max(stats))
-    # print([len(o) for o in overall_points])
+    print([len(o) for o in overall_points])
     overall_points = np.stack(overall_points, axis=0)
     overall_distances = np.stack(overall_distances, axis=0)
     test_points = np.stack(test_points, axis=0)
@@ -270,10 +273,11 @@ def write_to_h5py(overall_points, overall_distances, index, nm):
     f["index"] = index
 
 
-def run(version, inpath="/home/theresa/p/",outpath ="", has_labels = False):
+def run(version, inpath="/home/theresa/p/",outpath =""):
+    print("generating h5 pys for ", inpath)
     d = inpath
     point_clouds, point_cloud_distances, point_clouds_test, \
-    point_distances_test, index_names, index_namest = read_n_point_clouds(d, has_labels)
+    point_distances_test, index_names, index_namest = read_n_point_clouds(d)
     write_to_h5py(point_clouds, point_cloud_distances, index_names, outpath+f"{version}train.h5")
     write_to_h5py(point_clouds_test, point_distances_test, index_namest, outpath+f"{version}test.h5")
 

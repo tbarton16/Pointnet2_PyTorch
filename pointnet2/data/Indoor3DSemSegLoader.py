@@ -90,6 +90,8 @@ class Indoor3DSemSeg(data.Dataset):
             print("train", dist.shape)
         else:
             print("test", dist.shape)
+            print(index)
+            # assert False
 
         # data = data / dist[:, np.newaxis, :] # scale
         if not np.all(np.isfinite(data)):
