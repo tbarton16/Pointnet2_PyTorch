@@ -121,6 +121,7 @@ def evaluate_step(args, input_name, input_path, checkpoint_name,
                   best_checkpoint_name, output_name, file_test = None, file_train = None):
     # input_name is the directory name in gsd that contains the files that the network must process.
     # input_path is the full path to the files
+    outpath= f"/home/theresa/Pointnet2_PyTorch/pointnet2/generated_shapes_debug/"
     if file_test and file_train:
         pass
     else:
@@ -130,7 +131,7 @@ def evaluate_step(args, input_name, input_path, checkpoint_name,
         # make train and test files
         run(input_name,
             inpath=input_path,
-            outpath=f"/home/theresa/Pointnet2_PyTorch/pointnet2/generated_shapes_debug/")
+            outpath=outpath)
     test_set = Indoor3DSemSeg(args.num_points, file_test, train=False)
     test_loader = DataLoader(
         test_set,
@@ -166,10 +167,17 @@ def evaluate_step(args, input_name, input_path, checkpoint_name,
         results_folder=output_name
     )
     print(len(train_loader), len(test_loader))
-    _ = evaluator.eval_epoch(train_loader, "train_guesses")
-    _ = evaluator.eval_epoch(test_loader, "test_guesses")
-
+    _ = evaluator.eval_epoch(test_loader, "test_guesses1")
+    _ = evaluator.eval_epoch(test_loader, "test_guesses2")
+    _ = evaluator.eval_epoch(test_loader, "test_guesses3")
     # TODO resample points
+    pts = {}
+    import numpy as np
+    for i in range(1,4):
+        path = outpath + "00152020-01-09T08/" + f"test_guesses{i}"
+        for p in os.path.listdir(path):
+            csv = np.genfromtext(path + "/" + p, dtype=np.float64, delimiter=",")
+
 
 
 if __name__ == "__main__":

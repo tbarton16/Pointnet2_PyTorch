@@ -9,200 +9,9 @@ import pdb
 import random
 import pprint
 
-npoints = 4096
+npoints = 10000
 ndim = 4
-test = [13,
-        19,
-        23,
-        38,
-        39,
-        51,
-        60,
-        66,
-        68,
-        75,
-        78,
-        80,
-        88,
-        90,
-        93,
-        96,
-        106,
-        108,
-        114,
-        116,
-        126,
-        142,
-        152,
-        153,
-        163,
-        190,
-        197,
-        199]
-train = [1,
-         2,
-         4,
-         5,
-         6,
-         8,
-         9,
-         10,
-         11,
-         12,
-         14,
-         15,
-         16,
-         17,
-         18,
-         20,
-         21,
-         22,
-         24,
-         25,
-         26,
-         27,
-         28,
-         29,
-         30,
-         31,
-         32,
-         33,
-         34,
-         35,
-         36,
-         40,
-         41,
-         42,
-         43,
-         44,
-         45,
-         46,
-         47,
-         48,
-         49,
-         50,
-         52,
-         53,
-         54,
-         55,
-         56,
-         57,
-         58,
-         59,
-         62,
-         63,
-         64,
-         65,
-         67,
-         69,
-         70,
-         71,
-         72,
-         73,
-         74,
-         76,
-         77,
-         79,
-         81,
-         82,
-         83,
-         84,
-         86,
-         87,
-         89,
-         91,
-         92,
-         94,
-         95,
-         97,
-         98,
-         99,
-         100,
-         101,
-         102,
-         103,
-         104,
-         105,
-         107,
-         109,
-         110,
-         112,
-         113,
-         117,
-         118,
-         119,
-         120,
-         121,
-         122,
-         123,
-         124,
-         125,
-         127,
-         128,
-         129,
-         130,
-         131,
-         132,
-         133,
-         134,
-         135,
-         136,
-         137,
-         138,
-         139,
-         140,
-         141,
-         143,
-         144,
-         145,
-         146,
-         147,
-         148,
-         149,
-         150,
-         151,
-         154,
-         155,
-         156,
-         157,
-         158,
-         159,
-         160,
-         161,
-         162,
-         164,
-         165,
-         166,
-         167,
-         168,
-         169,
-         171,
-         172,
-         173,
-         174,
-         175,
-         176,
-         177,
-         178,
-         179,
-         180,
-         181,
-         183,
-         184,
-         185,
-         186,
-         187,
-         188,
-         189,
-         191,
-         192,
-         194,
-         195,
-         196,
-         198,
-         200,
-         201,
-         202]
+test = [136, 48, 98, 81, 114, 138, 90, 70, 177, 80, 55, 87, 75, 192, 57, 41, ]
 
 
 def read_point_cloud(filename, stats):
@@ -240,7 +49,7 @@ def read_n_point_clouds(d):
             # r = random.random()
             file_index = int(name)
 
-            if file_index in train:
+            if file_index not in test:
                 # for fi in os.listdir(sub):
                 points, distances, stats = read_point_cloud(filename, stats)
                 file_index = int(name)
@@ -256,7 +65,7 @@ def read_n_point_clouds(d):
                 index_names_test.append(file_index)
 
     print("stats:", sum(stats) / float(len(stats)), min(stats), max(stats))
-    print([len(o) for o in overall_points])
+    # print([len(o) for o in overall_points])
     overall_points = np.stack(overall_points, axis=0)
     overall_distances = np.stack(overall_distances, axis=0)
     test_points = np.stack(test_points, axis=0)
@@ -273,7 +82,7 @@ def write_to_h5py(overall_points, overall_distances, index, nm):
     f["index"] = index
 
 
-def run(version, inpath="/home/theresa/p/",outpath =""):
+def run(version, inpath="/home/theresa/p/",outpath ="/home/theresa/p/"):
     print("generating h5 pys for ", inpath)
     d = inpath
     point_clouds, point_cloud_distances, point_clouds_test, \
@@ -283,4 +92,6 @@ def run(version, inpath="/home/theresa/p/",outpath =""):
 
 
 if __name__ == "__main__":
-    run(4)
+    import sys
+    d = sys.argv[1]
+    run("",d)

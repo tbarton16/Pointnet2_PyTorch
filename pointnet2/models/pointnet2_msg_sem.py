@@ -54,7 +54,6 @@ def model_fn_decorator(criterion):
 
             preds = model(inputs)
             loss = criterion(preds.view(labels.numel(), -1), labels.view(-1))
-            # print(loss)
             # print("labels:", labels)
             if not isfinite(loss):
                 print(isfinite(preds))

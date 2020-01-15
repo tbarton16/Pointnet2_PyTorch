@@ -30,9 +30,9 @@ def _load_data_file(name):
     data = f["data"][:]
     label = f["labels"][:]
     index = f["index"][:]
-    data = data[:,:4096, :]
+    data = data[:, :, :]
     # data = np.array(stack(data))
-    label = label[:,:4096]
+    label = label[:,:]
     # label = np.array(stack(label))
     return data, label, index
 
@@ -106,7 +106,9 @@ class Indoor3DSemSeg(data.Dataset):
 
 
     def __getitem__(self, idx):
-        pt_idxs = np.arange(0, self.num_points)
+        pt_idxs = np.arange(0, 10000)
+        pt_idxs = np.random.choice(pt_idxs, 4096, replace=False)
+
         np.random.shuffle(pt_idxs)
 
         current_points = torch.from_numpy(self.points[idx, pt_idxs].copy()).type(
@@ -116,6 +118,10 @@ class Indoor3DSemSeg(data.Dataset):
             torch.LongTensor
         )
         current_index = self.index[idx].copy()
+        # print(current_points,)
+        # print(current_labels)
+        # print(current_index)
+        # assert False
 
         return current_points, current_labels, current_index
 

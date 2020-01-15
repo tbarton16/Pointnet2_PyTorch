@@ -7,6 +7,8 @@ import numpy as np
 from numpy import genfromtxt
 import os
 
+test_run = False
+
 #  use eval results to generate next samples. samples are saved to reconstructed seams with file name, v.
 def accuracy(mesh, ind, preds):
     # first calculate diffusion for all the verts, then convert these values to probabilities
@@ -92,7 +94,6 @@ def precision(mesh, ind, preds):
         distances.append(total_distance)
 
     return np.average(distances)
-
 def sample_mesh(mesh, n_pts, gamma, output):
     print(mesh)
     # first calculate diffusion for all the verts, then convert these values to probabilities
@@ -192,7 +193,8 @@ def facetoface(f):
 def facetopoints(points, v, f, sampled_points=None):
     if points:
         gamma = genfromtxt(points, dtype=np.float64, delimiter=",")
-        # gamma = np.asarray([[0.,0.1,0.,0], [0.,0.5,0.,1],  [0., 0.6, 0., 1]], dtype=np.float64)
+        if test_run:
+            gamma = np.asarray([[0.,0.1,0.,0], [0.,0.5,0.,1],  [0., 0.6, 0., 1]], dtype=np.float64)
         pointsonly = np.array([list(g[:-1]) for g in gamma])
 
     else:
@@ -228,10 +230,10 @@ def mesh_knn(mesh, n_pts, gamma, output, k):
     # for mesh with predictions gamma if point type is vertex, calculate the knn for each vertex
     # if point type is random, use gamma to calculate knn for passed in points
     v, f = ig.read_triangle_mesh(mesh)
-
-    # v = np.asarray([[0, 2, 0], [1, 1, 0], [-1, 1, 0], [1, 2, 0], [-1, 3, 0], [0, 0, 0]], dtype=np.float64)
-    # f = np.asarray([[3, 2, 6], [3, 1, 2], [1, 4, 2], [1, 5, 4]], dtype=np.int32)
-    # f = np.asarray([[i-1 for i in p] for p in f], dtype=np.int32)
+    if test_run:
+        v = np.asarray([[0, 2, 0], [1, 1, 0], [-1, 1, 0], [1, 2, 0], [-1, 3, 0], [0, 0, 0]], dtype=np.float64)
+        f = np.asarray([[3, 2, 6], [3, 1, 2], [1, 4, 2], [1, 5, 4]], dtype=np.int32)
+        f = np.asarray([[i-1 for i in p] for p in f], dtype=np.int32)
 
     # map faces to points
     ftop, _ = facetopoints(gamma, v, f)
@@ -245,26 +247,40 @@ def mesh_knn(mesh, n_pts, gamma, output, k):
     while len(pts) < n_pts:
         Bary, FI = ig.random_points_on_mesh(n_pts, v, f)
         ws_points = []
+        point_faces = []
         pointstoface = {}
         for idx, bf in enumerate(zip(Bary, FI)):
             b, face = bf
+            point_faces.append(face)
             verts = [v[i] for i in f[face]]
             pt = sum([float(b[i]) * verts[i] for i in range(len(verts))])
             ws_points.append(pt)
-            pointstoface[idx]=[face]
-        # ws_points = np.asarray([[0., 0.1, 0.], [0., 0.5, 0.]], dtype=np.float64)
-        labeled_verts = vert_knn(ftop, idxtofacenn, pointstoface, ws_points, k=5)
+
+        opposite_points = np.array([[-1 * x, y, z] for x, y, z in ws_points])
+        _, opp_prims, _ = ig.point_mesh_squared_distance(opposite_points, v, f)
+        opposite_point_faces = opp_prims.astype(np.int64)
+        for idx, _ in enumerate(ws_points):
+            opposite_point_face = opposite_point_faces[idx]
+            face = point_faces[idx]
+            pointstoface[idx] = [face, opposite_point_face]
+        if test_run:
+            ws_points = np.asarray([[0., 0.1, 0.], [0., 1.5, 0.]], dtype=np.float64)
+        labeled_verts = vert_knn(ftop, idxtofacenn, pointstoface, ws_points, k=k)
         # _, pointstoface = facetopoints(None, v, f, sampled_points)
         # gamma = np.asarray([[0., 0.1, 0.], [0., 0.5, 0.]], dtype=np.float64)
         for vert in labeled_verts:
-            if vert
-    np.savetxt(output, np.asarray(labeled_verts), delimiter=",")
+            if vert[3] < np.random.uniform(0,1):
+                pts.append(vert)
+            # pts.append(vert[:])
+        print("points sampled:", len(pts))
+    pts = pts[:n_pts]
+    np.savetxt(output, np.asarray(pts), delimiter=",")
 
 
-def vert_knn(ftop, idxtofacenn, v2f, sampled_points, k=5,seam_threshold=0):
+def vert_knn(ftop, idxtofacenn, v2f, sampled_points, k=5,seam_threshold=0, distance_threshold=.01):
 
     labeled_verts = []
-    for i, verts in enumerate(sampled_points):# TODO keep track of visited verts
+    for i, verts in enumerate(sampled_points):
         # Check my prim first
         fringe = v2f[i]
         close_points = []
@@ -294,33 +310,119 @@ def vert_knn(ftop, idxtofacenn, v2f, sampled_points, k=5,seam_threshold=0):
             fringe = new_fringe
 
         tot = sum([np.linalg.norm(np.asarray(x[:-1]) - np.asarray(verts)) for x in close_points])
-        weight = 0.
-        yeses = 0
-        nos = 0
-        # print("for", verts, tot)
-        for pt in close_points: # TODO weight special for sparse pts or max radius
-            if pt[3] == 0.:
-                yeses += 1
-            else:
-                nos+=1
-            # print("for", pt, )
-            # d = np.linalg.norm(np.asarray(pt[:-1])- np.asarray(verts))
-            # print("distance", d, "d/t", (d / float(tot)), "weight=", 1-(d/float(tot)))
-            # weight += pt[3] * (1. - (d / float(tot)))
-            # print("total weight", weight)
-        # print("-----")
-        cls = 0. if yeses > nos else 1
-        # seam threshold: scores lower mapped to zero
-        # if weight < seam_threshold:
-        #     weight = 0.
-        verts = verts.tolist()
-        verts.append(cls)
-        labeled_verts.append(np.asarray(verts))
+        weights = []
 
-    # print(labeled_verts)
-    # import time
-    # time.sleep(10)
+        # print("for", verts, tot)
+        if len(close_points)== 0:
+            prob = 1
+        elif len(close_points) == 1:
+            prob = close_points[0][3]
+        else:
+            distances = []
+            for pt in close_points: # TODO weight special for sparse pts or max radius
+
+                # print("for", pt, )
+                d = np.linalg.norm(np.asarray(pt[:-1])- np.asarray(verts))
+                # print("distance", d, "d/t", (d / float(tot)), "weight=", 1-(d/float(tot)))
+                distances.append(d)
+                weights.append(1. - (d / float(tot)))
+            if min(distances) > distance_threshold:
+                prob = 1.
+            else:
+
+                # print("total weight", sum(weights))
+                # print("-----")
+                weights /= sum(weights)
+                prob = 0.
+                for w, pt in zip(weights, close_points): # TODO weight special for sparse pts or max radius
+                    prob += w * pt[3]
+                # seam threshold: scores lower mapped to zero
+                # if weight < seam_threshold:
+                #     weight = 0.
+        verts = verts.tolist()
+        verts.append(prob)
+        labeled_verts.append(np.asarray(verts))
+    if test_run:
+        print("labeled_verts", labeled_verts)
     return labeled_verts
+
+def relabel_pts(random_points, ptfile, m, num, width):
+    # load points
+    # unlabeled_points = genfromtxt(ptfile, dtype=np.float64, delimiter=",")
+
+    unlabeled_points = []
+    for r in random_points:
+        r = list(r)
+        unlabeled_points.append(r[:3])
+    unlabeled_points =np.array(unlabeled_points)
+    if test_run:
+        unlabeled_points = np.array([[0, 0.1, 0], [0, 0.2, 0]])
+    # attribute points to faces
+    num = str(num)
+    if len(num) == 1:
+        num = "00" + num
+    elif len(num) == 2:
+        num = "0" + num
+    mfile = os.path.join(m, num + ".obj")
+    v, f = ig.read_triangle_mesh(mfile)
+    f = f.astype(np.int32)
+    if test_run:
+        v = np.asarray([[0, 2, 0], [1, 1, 0], [-1, 1, 0], [1, 2, 0], [-1, 3, 0], [0, 0, 0]], dtype=np.float64)
+        f = np.asarray([[3, 2, 6], [3, 1, 2], [1, 4, 2], [1, 5, 4]], dtype=np.int32)
+        f = np.asarray([[i - 1 for i in p] for p in f], dtype=np.int32)
+    _, prims, point_verts = ig.point_mesh_squared_distance(unlabeled_points, v, f)
+
+    # find where pts are
+    bary = []
+    for pt,vert in zip(unlabeled_points,prims):
+        v1, v2, v3 = [v[i] for i in f[vert]]
+
+
+        def toArray(p, d= np.float64):
+            p = list(p)
+            p = np.array([p], dtype=d)
+            return p
+
+        # print("b")
+        b = ig.barycentric_coordinates_tri(toArray(pt, np.float64), toArray(v1), toArray(v2), toArray(v3))
+        bary.append(b)
+
+    seam_verts = load_seams(num, m)
+    if test_run:
+        seam_verts = [4]
+    # label face verts with geodesic distances
+    point_verts_dict = {}
+    for p in prims:
+        for i in f[p]:
+            if i not in point_verts_dict:
+                point_verts_dict[i] = 0
+    pt_list = list(point_verts_dict.keys())
+    print("num_verts, keys:", len(v), len(pt_list))
+    # d = ig.exact_geodesic(v, f,   toArray(seam_verts, np.int32), toArray(pt_list, np.int32),None, None)
+    # print("c")
+    pt_list1 = pt_list[:int(len(pt_list)/2)]
+    pt_list2 = pt_list[int(len(pt_list)/2):]
+
+    d1 = ig.exact_geodesic(v, f, np.array(seam_verts, dtype=np.int32), np.array(pt_list1, dtype=np.int32), None, None)
+    d2 = ig.exact_geodesic(v, f, np.array(seam_verts, dtype=np.int32), np.array(pt_list2, dtype=np.int32), None, None)
+    print("distances:", len(d1)+len(d2))
+    for di, pi in zip(d1, pt_list1):
+        point_verts_dict[pi] = di
+    for di, pi in zip(d2, pt_list2):
+        point_verts_dict[pi] = di
+    # label points with interpolated distances
+    labeled_points = []
+    for pt, prim, b   in zip(unlabeled_points, prims, bary):
+        l = sum([float(b[i]) * point_verts_dict[vidx] for i, vidx in enumerate(f[prim])])
+        pt = list(pt)
+        pt.append(l)
+        labeled_points.append(pt)
+    if test_run:
+        print("source:", toArray(pt_list, np.int32), "dest", toArray(seam_verts, np.int32))
+        print("dist:", d, "pts", pt_list)
+        print(labeled_points)
+
+    np.savetxt(ptfile, np.array(labeled_points), delimiter=", ")
 
 
 def resample_directory(d, o, m, exclusion_list):
@@ -328,13 +430,13 @@ def resample_directory(d, o, m, exclusion_list):
     accs = []
     if not os.path.exists(o):
         os.mkdir(o)
-    inclusion_list = [136, 48, 138, 70, 80, 55, 75, 192]
+    #inclusion_list = [136, 48, 138, 70, 80, 55, 75, 192]
     for i,f in enumerate(os.listdir(d)[:]):
         infile = os.path.join(d, f)
         num, _ = f.split(".")
         print(num)
         numpad = num
-        if int(num) not in inclusion_list: # TODO change back
+        if int(num) in exclusion_list: # TODO change back
             continue
         if len(num) == 1:
             num = "00" + num
@@ -344,24 +446,48 @@ def resample_directory(d, o, m, exclusion_list):
         mfile = os.path.join(m, num + ".obj")
 
         # try:
-            # p =  precision(mfile, numpad, infile)
-            # precisions.append(p)
-            # a = accuracy(mfile, numpad, infile)
-            # accs.append(a)
-        mesh_knn(mfile, 4096, infile, outfile, k=5)
-            # print("precision: ",p)
-            # print("accuracy: ", a)
+        # p =  precision(mfile, numpad, infile)
+        # precisions.append(p)
+        # a = accuracy(mfile, numpad, infile)
+        # accs.append(a)
+        mesh_knn(mfile, 10000, infile, outfile, k=7)
+        # relabel_pts(new_pts, outfile, m, num, width= 0.03)
+
+        #load_seams(int(numpad), m)
+    # print("precision: ",p)
+        # print("accuracy: ", a)
         # except:
         #     pass
     return precisions, accs
 
+def load_seams(f,m):
+    f = int(f)
+    infile = f"/home/theresa/p/verts_seams/{f}.csv"
+    gamma = genfromtxt(infile, dtype=np.int32, delimiter=",")
+    num = str(f)
+    if len(num) == 1:
+        num = "00" + num
+    elif len(num) == 2:
+        num = "0" + num
+    mfile = os.path.join(m, num + ".obj")
+    v, _ = ig.read_triangle_mesh(mfile)
+    verts = []
+    for g in gamma:
+        verts.append(v[g])
+    outfile = f"/home/theresa/p/verts_points/{f}.csv"
+    np.savetxt(outfile,np.asarray(verts), delimiter = ",")
+    return verts
+
 
 if __name__ == "__main__":
+    meshes = "/home/theresa/p/datav5_obj"
 
     v = str(sys.argv[1])
+    c = v.split("/")
+    c = c[-2] + c[-1]
+    v = c
     train_predicted_path = f"/home/theresa/Pointnet2_PyTorch/pointnet2/generated_shapes_debug/{v}/train_guesses"
     test_predicted_path = f"/home/theresa/Pointnet2_PyTorch/pointnet2/generated_shapes_debug/{v}/test_guesses"
-    meshes = "/home/theresa/p/datav5_obj"
     train_output = f"/home/theresa/Pointnet2_PyTorch/pointnet2/generated_shapes_debug/{v}+resampled/"
     test_output = f"/home/theresa/Pointnet2_PyTorch/pointnet2/generated_shapes_debug/{v}+resampled/"
     if not os.path.isdir(train_output):

@@ -104,12 +104,12 @@ bnm_clip = 1e-2
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    # c = args.v.split("/")
-    # c = c[-2] + c[-1]
-    file_test = f"/home/theresa/p/{args.v}test.h5"
-    file_train = f"/home/theresa/p/{args.v}train.h5"
+    c = args.v.split("/")
+    c = c[-2] + c[-1]
+    file_test = f"/home/theresa/p/{c}test.h5"
+    file_train = f"/home/theresa/p/{c}train.h5"
     if not os.path.exists(file_test):
-        run(args.v)
+        run(c, inpath=args.v)
     test_set = Indoor3DSemSeg(args.num_points, file_test, train=False)
     test_loader = DataLoader(
         test_set,
