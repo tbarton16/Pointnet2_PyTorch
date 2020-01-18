@@ -43,6 +43,7 @@ def isfinite(x):
     return not_inf & not_nan
 
 
+
 def model_fn_decorator(criterion):
     ModelReturn = namedtuple("ModelReturn", ["preds", "loss", "acc"])
 
@@ -54,6 +55,13 @@ def model_fn_decorator(criterion):
 
             preds = model(inputs)
             loss = criterion(preds.view(labels.numel(), -1), labels.view(-1))
+            _, classes = torch.max(preds, -1)
+            acc = (classes == labels).float().sum() / labels.numel()
+            # counter += 1
+            # if counter == 100:
+            #     print(loss, acc)
+            #     counter = 0
+
             # print("labels:", labels)
             if not isfinite(loss):
                 print(isfinite(preds))
@@ -61,8 +69,6 @@ def model_fn_decorator(criterion):
                 # print("inputs:", inputs)
                 assert isfinite(loss)
 
-            _, classes = torch.max(preds, -1)
-            acc = (classes == labels).float().sum() / labels.numel()
             # print("writing")
             # print("classes:", classes)
 
@@ -229,7 +235,7 @@ if __name__ == "__main__":
         # print(preds.shape)
         # print(inputs.shape)
         loss.backward()
-        # print(loss.data[0])
+        print(loss.data[0])
         optimizer.step()
 
     # with use_xyz=False

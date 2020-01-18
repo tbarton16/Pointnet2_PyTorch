@@ -193,8 +193,8 @@ def facetoface(f):
 def facetopoints(points, v, f, sampled_points=None):
     if points:
         gamma = genfromtxt(points, dtype=np.float64, delimiter=",")
-        if test_run:
-            gamma = np.asarray([[0.,0.1,0.,0], [0.,0.5,0.,1],  [0., 0.6, 0., 1]], dtype=np.float64)
+        # if test_run:
+        #     gamma = np.asarray([[0.,0.1,0.,0], [0.,0.5,0.,1],  [0., 0.6, 0., 1]], dtype=np.float64)
         pointsonly = np.array([list(g[:-1]) for g in gamma])
 
     else:
@@ -286,6 +286,7 @@ def vert_knn(ftop, idxtofacenn, v2f, sampled_points, k=5,seam_threshold=0, dista
         close_points = []
         visited_prims = [f for f in fringe]
         while len(close_points) < k and len(fringe) != 0:
+
             points = []
             for p in fringe:
                 # no points on prim
@@ -313,8 +314,10 @@ def vert_knn(ftop, idxtofacenn, v2f, sampled_points, k=5,seam_threshold=0, dista
         weights = []
 
         # print("for", verts, tot)
-        if len(close_points)== 0:
+        if len(close_points) == 0:
             prob = 1
+            if test_run:
+                print("no close points for ", verts)
         elif len(close_points) == 1:
             prob = close_points[0][3]
         else:
@@ -323,11 +326,15 @@ def vert_knn(ftop, idxtofacenn, v2f, sampled_points, k=5,seam_threshold=0, dista
 
                 # print("for", pt, )
                 d = np.linalg.norm(np.asarray(pt[:-1])- np.asarray(verts))
+                opposite_point = [verts[0]*-1, verts[1], verts[2]]
+                dop = np.linalg.norm(np.asarray(pt[:-1])- np.asarray(opposite_point))
                 # print("distance", d, "d/t", (d / float(tot)), "weight=", 1-(d/float(tot)))
-                distances.append(d)
+                distances.append(min(dop,d))
                 weights.append(1. - (d / float(tot)))
             if min(distances) > distance_threshold:
                 prob = 1.
+                if test_run:
+                    print("too far away", verts)
             else:
 
                 # print("total weight", sum(weights))
@@ -345,6 +352,34 @@ def vert_knn(ftop, idxtofacenn, v2f, sampled_points, k=5,seam_threshold=0, dista
     if test_run:
         print("labeled_verts", labeled_verts)
     return labeled_verts
+
+def extract_seams(pts, mesh):
+
+    if test_run:
+        v = np.asarray([[0, 2, 0], [1, 1, 0], [-1, 1, 0], [1, 2, 0], [-1, 3, 0], [0, 0, 0]], dtype=np.float64)
+        f = np.asarray([[3, 2, 6], [3, 1, 2], [1, 4, 2], [1, 5, 4],
+                        [1, 3, 5], []], dtype=np.int32)
+        f = np.asarray([[i - 1 for i in p] for p in f], dtype=np.int32)
+    else:
+        gamma = genfromtxt(pts, dtype=np.float64, delimiter=",")
+        v, f = ig.read_triangle_mesh(mesh)
+
+    if test_run:
+        gamma = np.asarray([[0., 0.1, 0., 1], [0., 0.5, 0., .9], [0., 0.6, 0., .5],
+                            [0, 1.9, 0, .01], [0.5, 1.9, 0, .1], [-1, 3, 0, 1],
+                            ], dtype=np.float64)
+    v2f = verttoface(f)
+    idxtofacenn = facetoface(f)
+    ftop, _ = facetopoints(None, v, f, gamma)
+    print("ftop:",ftop)
+    print("v2f:", v2f)
+    labeled_verts = vert_knn(ftop, idxtofacenn, v2f, v, k=2, distance_threshold=1.5)
+    print(labeled_verts)
+
+
+
+
+
 
 def relabel_pts(random_points, ptfile, m, num, width):
     # load points
@@ -431,7 +466,7 @@ def resample_directory(d, o, m, exclusion_list):
     if not os.path.exists(o):
         os.mkdir(o)
     #inclusion_list = [136, 48, 138, 70, 80, 55, 75, 192]
-    for i,f in enumerate(os.listdir(d)[:]):
+    for i, f in enumerate(os.listdir(d)[:]):
         infile = os.path.join(d, f)
         num, _ = f.split(".")
         print(num)
@@ -451,6 +486,7 @@ def resample_directory(d, o, m, exclusion_list):
         # a = accuracy(mfile, numpad, infile)
         # accs.append(a)
         mesh_knn(mfile, 10000, infile, outfile, k=7)
+        # extract_seams(None, mfile)
         # relabel_pts(new_pts, outfile, m, num, width= 0.03)
 
         #load_seams(int(numpad), m)
@@ -475,12 +511,13 @@ def load_seams(f,m):
     for g in gamma:
         verts.append(v[g])
     outfile = f"/home/theresa/p/verts_points/{f}.csv"
-    np.savetxt(outfile,np.asarray(verts), delimiter = ",")
+    np.savetxt(outfile, np.asarray(verts), delimiter = ",")
     return verts
 
 
 if __name__ == "__main__":
-    meshes = "/home/theresa/p/datav5_obj"
+    meshes = "/home/theresa/p/datav7_obj"
+    # extract_seams(None, None)
 
     v = str(sys.argv[1])
     c = v.split("/")
@@ -503,10 +540,10 @@ if __name__ == "__main__":
     print("TEST")
     testp, testa = resample_directory(test_predicted_path,
                                       train_output,
-                                      meshes, [68, 128, 125])
+                                      meshes,[])# [68, 128, 125])
     print("TRAIN")
     trainp, traina = resample_directory(train_predicted_path, train_output,
-                  meshes, [0, 5, 83, 112, 173, 191])
+                  meshes, [])#[0, 5, 83, 112, 173, 191])
 
     print("train:", np.average(trainp), np.average(traina))
     print("test:", np.average(testp), np.average(testa))

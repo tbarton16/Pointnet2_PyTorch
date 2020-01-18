@@ -22,6 +22,8 @@ from generate_fake_data import run
 from pointnet2.models import Pointnet2SemMSG as Pointnet
 from pointnet2.models.pointnet2_msg_sem import model_fn_decorator
 from pointnet2.data import Indoor3DSemSeg
+import h5py
+import numpy as np
 
 parser = argparse.ArgumentParser(description="Arg parser")
 parser.add_argument(
@@ -110,7 +112,13 @@ if __name__ == "__main__":
     file_train = f"/home/theresa/p/{c}train.h5"
     if not os.path.exists(file_test):
         run(c, inpath=args.v)
-    test_set = Indoor3DSemSeg(args.num_points, file_test, train=False)
+    f = h5py.File(file_train)
+    median_data = f["labels"][:]
+    medians = []
+    for data_file in median_data:
+        medians.append(np.median(data_file))
+    thresh = np.median(medians)
+    test_set = Indoor3DSemSeg(args.num_points, file_test, train=False, thresh=thresh)
     test_loader = DataLoader(
         test_set,
         batch_size=args.batch_size,

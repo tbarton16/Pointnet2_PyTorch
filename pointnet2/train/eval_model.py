@@ -18,6 +18,8 @@ import pprint
 import os.path as osp
 import os
 import argparse
+import numpy as np
+import h5py
 
 torch.manual_seed(0)
 from generate_fake_data import run
@@ -110,8 +112,13 @@ if __name__ == "__main__":
     c = c[-2] + c[-1]
     file_test = f"/home/theresa/p/{c}test.h5"
     file_train = f"/home/theresa/p/{c}train.h5"
-
-    test_set = Indoor3DSemSeg(args.num_points, file_test, train=False)
+    f = h5py.File(file_train)
+    median_data = f["labels"][:]
+    medians = []
+    for data_file in median_data:
+        medians.append(np.median(data_file))
+    thresh = np.median(medians)
+    test_set = Indoor3DSemSeg(args.num_points, file_test, train=False, thresh=thresh)
     test_loader = DataLoader(
         test_set,
         batch_size=args.batch_size,

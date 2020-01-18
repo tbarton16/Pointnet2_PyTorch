@@ -46,10 +46,10 @@ def read_n_point_clouds(d):
             # sub = os.path.join(d, ff)
             filename = os.path.join(d, ff)
             name, _ = ff.split(".")
-            # r = random.random()
+            r = random.random()
             file_index = int(name)
-
-            if file_index not in test:
+            if r < .85:
+            #if file_index not in test:
                 # for fi in os.listdir(sub):
                 points, distances, stats = read_point_cloud(filename, stats)
                 file_index = int(name)

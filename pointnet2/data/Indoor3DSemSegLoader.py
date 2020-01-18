@@ -38,7 +38,7 @@ def _load_data_file(name):
 
 
 class Indoor3DSemSeg(data.Dataset):
-    def __init__(self, num_points, file, train=True, download=True, data_precent=1.0):
+    def __init__(self, num_points, file, train=True, thresh=0, download=True, data_precent=1.0):
         super().__init__()
         self.data_precent = data_precent
         self.folder = "indoor3d_sem_seg_hdf5_data"
@@ -47,6 +47,7 @@ class Indoor3DSemSeg(data.Dataset):
             "https://shapenet.cs.stanford.edu/media/indoor3d_sem_seg_hdf5_data.zip"
         )
         self.file = file
+        self.thresh = thresh
         self.train, self.num_points = train, num_points
 
         # all_files = _get_data_files(os.path.join(self.data_dir, "all_files.txt"))
@@ -101,7 +102,20 @@ class Indoor3DSemSeg(data.Dataset):
             print(label)
             assert False
         self.points = data
-        self.labels = label
+        if train:
+            thresh = np.median(np.array(label), axis=1, keepdims= True)
+            print("train median", np.median(thresh, axis=0))
+            class_label = np.where(label > thresh, 1., 0.)
+            print("% train above",np.average(np.sum(class_label, axis=1) / class_label.shape[1], axis=0))
+        else:
+            thresh = self.thresh
+            print("test median", thresh)
+            class_label = np.where(label > thresh, 1., 0.)
+            print("% test above",np.average(np.sum(class_label, axis=1) / class_label.shape[1], axis=0))
+        # print(thresh)
+        # print(label.shape, )
+
+        self.labels = class_label
         self.index = index
 
 
