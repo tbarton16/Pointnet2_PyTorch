@@ -56,6 +56,8 @@ def model_fn_decorator(criterion):
             preds = model(inputs)
             loss = criterion(preds.view(labels.numel(), -1), labels.view(-1))
             _, classes = torch.max(preds, -1)
+            # print("classes", classes.shape)
+            # print("preds", preds[:,:,0].shape)
             acc = (classes == labels).float().sum() / labels.numel()
             # counter += 1
             # if counter == 100:
@@ -74,7 +76,7 @@ def model_fn_decorator(criterion):
 
             # print(inputs.shape)
             if epoch < 0:
-                plot_points(results_folder, inputs, classes, pfx, epoch, index, True)
+                plot_points(results_folder, inputs, preds[:,:,0], pfx, epoch, index, True)
                 plot_points(results_folder, inputs, labels, pfx + "gt", epoch, index, True)
             elif not eval and epoch%10 == 0:
 
@@ -82,13 +84,13 @@ def model_fn_decorator(criterion):
                 labels = labels.cpu().numpy()
                 classes = classes.cpu().numpy()
                 plot_points(results_folder, inputs, labels, "target", epoch)
-                plot_points(results_folder, inputs, classes, "preds", epoch)
+                plot_points(results_folder, inputs, preds[:,:,0], "preds", epoch)
             if eval:
                 inputs = inputs.cpu().numpy()
                 labels = labels.cpu().numpy()
                 classes = classes.cpu().numpy()
                 plot_points(results_folder, inputs, labels, "eval_target", epoch)
-                plot_points(results_folder, inputs, classes, "eval_preds", epoch)
+                plot_points(results_folder, inputs, preds[:,:,0], "eval_preds", epoch)
 
         return ModelReturn(preds, loss, {"acc": acc.item(), "loss": loss.item()})
 
@@ -109,6 +111,7 @@ class Pointnet2MSG(nn.Module):
             value should be 6 as in an Nx9 point cloud, 3 of the channels are xyz, and 6 are feature descriptors
         use_xyz: bool = True
             Whether or not to use the xyz position of a point as a feature
+
     """
 
     def __init__(self, num_classes, input_channels=6, use_xyz=True):

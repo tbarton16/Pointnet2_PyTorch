@@ -90,6 +90,9 @@ parser.add_argument(
     "-checkpoint", type=str, default=None, help="Checkpoint to start from"
 )
 parser.add_argument(
+    "-en", type=str, default=None, help="Experiment name to start from"
+)
+parser.add_argument(
     "-epochs", type=int, default=1000, help="Number of epochs to train for"
 )
 parser.add_argument(
@@ -108,6 +111,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     c = args.v.split("/")
     c = c[-2] + c[-1]
+    en = args.en
     file_test = f"/home/theresa/p/{c}test.h5"
     file_train = f"/home/theresa/p/{c}train.h5"
     if not os.path.exists(file_test):
@@ -188,12 +192,12 @@ if __name__ == "__main__":
         model,
         model_fn,
         optimizer,
-        checkpoint_name=f"checkpoints/pointnet2_{c}",
-        best_name=f"checkpoints/pointnet2_{c}_best",
+        checkpoint_name=f"checkpoints/pointnet2_{en}",
+        best_name=f"checkpoints/pointnet2_{en}_best",
         lr_scheduler=lr_scheduler,
         bnm_scheduler=bnm_scheduler,
         viz=viz,
-        results_folder=c
+        results_folder=en
     )
 
     trainer.train(
