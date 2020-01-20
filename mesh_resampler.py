@@ -1,11 +1,12 @@
 import sys
 sys.path.append("/home/theresa/libigl/python")
-import pyigl as old_igl
+# import pyigl as old_igl
 import igl as ig
-from iglhelpers import *
+# from iglhelpers import *
 import numpy as np
 from numpy import genfromtxt
 import os
+import networkx as nx
 
 test_run = False
 
@@ -299,7 +300,9 @@ def vert_knn(ftop, idxtofacenn, v2f, sampled_points, k=5,seam_threshold=0, dista
                 close_points += points
             else:
                 # add all the points on the fringe to the points in sorted order
+                # points = sorted(points, key=lambda x: np.linalg.norm(np.asarray(x[:-1])- np.asarray(verts)))
                 points = sorted(points, key=lambda x: np.linalg.norm(np.asarray(x[:-1])- np.asarray(verts)))
+
                 close_points += points[:k-len(close_points)]
             new_fringe = []
 
@@ -353,28 +356,58 @@ def vert_knn(ftop, idxtofacenn, v2f, sampled_points, k=5,seam_threshold=0, dista
         print("labeled_verts", labeled_verts)
     return labeled_verts
 
+def run_extract_seams(mesh="/home/theresa/p/data_v8/053.obj", ind=53):
+    # v, f = i.read_triangle_mesh(mesh)
+    seam_file = f"/home/theresa/p/seams_pred/{ind}.txt"
+    seams = f"/home/theresa/p/groundtruthseam/{ind}.csv"
+    # seams = genfromtxt(seams, dtype=np.float64, delimiter=",")
+    vert_pairs = extract_seams(pts=seams, mesh=mesh)
+    # np.savetxt(seam_file, np.array(vert_pairs), delimiter=" ")
+
 def extract_seams(pts, mesh):
 
     if test_run:
-        v = np.asarray([[0, 2, 0], [1, 1, 0], [-1, 1, 0], [1, 2, 0], [-1, 3, 0], [0, 0, 0]], dtype=np.float64)
+        v = np.asarray([[0, 2, 0], [1, 1, 0], [-1, 1, 0], [1, 2, 0], [-1, 3, 0], [0, 0, 0],
+                        [1,4,0], [2,3,0]], dtype=np.float64)
         f = np.asarray([[3, 2, 6], [3, 1, 2], [1, 4, 2], [1, 5, 4],
-                        [1, 3, 5], []], dtype=np.int32)
+                        [1, 3, 5], [7,5,4],[8,7,4],[8,4,2]], dtype=np.int32)
         f = np.asarray([[i - 1 for i in p] for p in f], dtype=np.int32)
     else:
         gamma = genfromtxt(pts, dtype=np.float64, delimiter=",")
         v, f = ig.read_triangle_mesh(mesh)
 
     if test_run:
-        gamma = np.asarray([[0., 0.1, 0., 1], [0., 0.5, 0., .9], [0., 0.6, 0., .5],
-                            [0, 1.9, 0, .01], [0.5, 1.9, 0, .1], [-1, 3, 0, 1],
-                            ], dtype=np.float64)
+        # gamma = np.asarray([[0., 0.1, 0., 1], [0., 0.5, 0., .9], [0., 0.6, 0., .5],
+        #                     [0, 1.9, 0, .01], [0.5, 1.9, 0, .1], [-1, 3, 0, 1],
+        #                     ], dtype=np.float64)
+        gamma = np.asarray([[0, 2, 0], [1, 1, 0], [-1, 1, 0], [1, 2, 0], [-1, 3, 0], [0, 0, 0],
+                        [1, 4, 0], [2, 3, 0]], dtype=np.float64)
+        labels = [1,0,0,1,0,0,0,0]
+        gamma = gamma.tolist()
+        gamma = zip(gamma, labels)
+        gamma = [g + [l] for g, l in gamma]
+        print(gamma)
     v2f = verttoface(f)
     idxtofacenn = facetoface(f)
-    ftop, _ = facetopoints(None, v, f, gamma)
-    print("ftop:",ftop)
-    print("v2f:", v2f)
+    ftop, _ = facetopoints(None, v, f, np.asarray([list(g) + [0.] for g in gamma]))
+    # print("ftop:",ftop)
+    # print("v2f:", v2f)
     labeled_verts = vert_knn(ftop, idxtofacenn, v2f, v, k=2, distance_threshold=1.5)
-    print(labeled_verts)
+    vert_w = {}
+    for i , _ in enumerate(v):
+        vert_w[i] = list(labeled_verts[i])[-1]
+    G = nx.Graph()
+    def add_tri(t):
+        for x, y in [(0,1), (1,2), (2,0)]:
+            # print(1-(vert_w[t[x]] + labeled_verts[t[y]])/2.)
+            G.add_edge(t[x], t[y], weight= (vert_w[t[x]] + vert_w[t[y]])/2.)
+    for t in f:
+        add_tri(t)
+
+    paths = nx.single_source_dijkstra_path(G, 5)
+    print(paths[6])
+    return None
+
 
 
 
@@ -479,13 +512,13 @@ def resample_directory(d, o, m, exclusion_list):
             num = "0" + num
         outfile = os.path.join(o,num+".csv")
         mfile = os.path.join(m, num + ".obj")
-
+        run_extract_seams(mfile, i)
         # try:
         # p =  precision(mfile, numpad, infile)
         # precisions.append(p)
         # a = accuracy(mfile, numpad, infile)
         # accs.append(a)
-        mesh_knn(mfile, 10000, infile, outfile, k=7)
+        # mesh_knn(mfile, 10000, infile, outfile, k=7)
         # extract_seams(None, mfile)
         # relabel_pts(new_pts, outfile, m, num, width= 0.03)
 
@@ -516,9 +549,10 @@ def load_seams(f,m):
 
 
 if __name__ == "__main__":
-    meshes = "/home/theresa/p/datav7_obj"
+    meshes = "/home/theresa/p/datav7_obj/"
     # extract_seams(None, None)
-
+    for m in os.listdir(meshes):
+        run_extract_seams(meshes+m)
     v = str(sys.argv[1])
     c = v.split("/")
     c = c[-2] + c[-1]
@@ -540,7 +574,7 @@ if __name__ == "__main__":
     print("TEST")
     testp, testa = resample_directory(test_predicted_path,
                                       train_output,
-                                      meshes,[])# [68, 128, 125])
+                                      meshes,[48])# [68, 128, 125])
     print("TRAIN")
     trainp, traina = resample_directory(train_predicted_path, train_output,
                   meshes, [])#[0, 5, 83, 112, 173, 191])
