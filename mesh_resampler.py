@@ -356,15 +356,14 @@ def vert_knn(ftop, idxtofacenn, v2f, sampled_points, k=5,seam_threshold=0, dista
         print("labeled_verts", labeled_verts)
     return labeled_verts
 
-def run_extract_seams(mesh="/home/theresa/p/data_v8/053.obj", ind=53):
-    # v, f = i.read_triangle_mesh(mesh)
-    seam_file = f"/home/theresa/p/seams_pred/{ind}.txt"
-    seams = f"/home/theresa/p/groundtruthseam/{ind}.csv"
-    # seams = genfromtxt(seams, dtype=np.float64, delimiter=",")
-    vert_pairs = extract_seams(pts=seams, mesh=mesh)
-    # np.savetxt(seam_file, np.array(vert_pairs), delimiter=" ")
 
-def extract_seams(pts, mesh):
+def run_extract_seams(mesh="/home/theresa/p/data_v8/053.obj", ind=53):
+    seam_file = f"/home/theresa/p/vert_pred/{ind}.txt"
+    seams = f"/home/theresa/p/groundtruthseam/{ind}.csv"
+    extract_seams(pts=seams, mesh=mesh, outfile = seam_file)
+
+
+def extract_seams(pts, mesh, outfile):
 
     if test_run:
         v = np.asarray([[0, 2, 0], [1, 1, 0], [-1, 1, 0], [1, 2, 0], [-1, 3, 0], [0, 0, 0],
@@ -387,110 +386,44 @@ def extract_seams(pts, mesh):
         gamma = zip(gamma, labels)
         gamma = [g + [l] for g, l in gamma]
         print(gamma)
+
     v2f = verttoface(f)
     idxtofacenn = facetoface(f)
     ftop, _ = facetopoints(None, v, f, np.asarray([list(g) + [0.] for g in gamma]))
     # print("ftop:",ftop)
     # print("v2f:", v2f)
-    labeled_verts = vert_knn(ftop, idxtofacenn, v2f, v, k=2, distance_threshold=1.5)
-    vert_w = {}
+    labeled_verts = vert_knn(ftop, idxtofacenn, v2f, v, k=3, distance_threshold=.03)
+    vert_w = []
     for i , _ in enumerate(v):
-        vert_w[i] = list(labeled_verts[i])[-1]
-    G = nx.Graph()
-    def add_tri(t):
-        for x, y in [(0,1), (1,2), (2,0)]:
-            # print(1-(vert_w[t[x]] + labeled_verts[t[y]])/2.)
-            G.add_edge(t[x], t[y], weight= (vert_w[t[x]] + vert_w[t[y]])/2.)
-    for t in f:
-        add_tri(t)
+        vert_w.append(list(labeled_verts[i])[-1])
+    # G = nx.Graph()
+    # def add_tri(t):
+    #     for x, y in [(0,1), (1,2), (2,0)]:
+    #         # print(1-(vert_w[t[x]] + labeled_verts[t[y]])/2.)
+    #         G.add_edge(t[x], t[y], weight= (vert_w[t[x]] + vert_w[t[y]])/2.)
+    # for t in f:
+    #     add_tri(t)
+    #
+    # paths = nx.single_source_dijkstra_path(G, 5)
+    # print(paths[6])
 
-    paths = nx.single_source_dijkstra_path(G, 5)
-    print(paths[6])
+    # export vert weights to file
+    thresh = .03
+    labeled_verts = list(enumerate(labeled_verts))
+    filter(lambda x: x[1][-1] < thresh, enumerate(labeled_verts))
+
+    a = sorted(labeled_verts, key = lambda x: x[1][0])[0][0]
+    b = sorted(labeled_verts, key=lambda x: x[1][0])[-1][0]
+    c = sorted(labeled_verts, key=lambda x: x[1][1])[0][0]
+    d = sorted(labeled_verts, key=lambda x: x[1][1])[-1][0]
+    e = sorted(labeled_verts, key=lambda x: x[1][2])[0][0]
+    f = sorted(labeled_verts, key=lambda x: x[1][2])[-1][0]
+    print(f"mesh {outfile} good seam startpts {a} {b} {c} {d} {e} {f}")
+    with open(outfile, "w") as f:
+        for i in vert_w:
+            f.write(str(i) +"\n")
+
     return None
-
-
-
-
-
-
-
-def relabel_pts(random_points, ptfile, m, num, width):
-    # load points
-    # unlabeled_points = genfromtxt(ptfile, dtype=np.float64, delimiter=",")
-
-    unlabeled_points = []
-    for r in random_points:
-        r = list(r)
-        unlabeled_points.append(r[:3])
-    unlabeled_points =np.array(unlabeled_points)
-    if test_run:
-        unlabeled_points = np.array([[0, 0.1, 0], [0, 0.2, 0]])
-    # attribute points to faces
-    num = str(num)
-    if len(num) == 1:
-        num = "00" + num
-    elif len(num) == 2:
-        num = "0" + num
-    mfile = os.path.join(m, num + ".obj")
-    v, f = ig.read_triangle_mesh(mfile)
-    f = f.astype(np.int32)
-    if test_run:
-        v = np.asarray([[0, 2, 0], [1, 1, 0], [-1, 1, 0], [1, 2, 0], [-1, 3, 0], [0, 0, 0]], dtype=np.float64)
-        f = np.asarray([[3, 2, 6], [3, 1, 2], [1, 4, 2], [1, 5, 4]], dtype=np.int32)
-        f = np.asarray([[i - 1 for i in p] for p in f], dtype=np.int32)
-    _, prims, point_verts = ig.point_mesh_squared_distance(unlabeled_points, v, f)
-
-    # find where pts are
-    bary = []
-    for pt,vert in zip(unlabeled_points,prims):
-        v1, v2, v3 = [v[i] for i in f[vert]]
-
-
-        def toArray(p, d= np.float64):
-            p = list(p)
-            p = np.array([p], dtype=d)
-            return p
-
-        # print("b")
-        b = ig.barycentric_coordinates_tri(toArray(pt, np.float64), toArray(v1), toArray(v2), toArray(v3))
-        bary.append(b)
-
-    seam_verts = load_seams(num, m)
-    if test_run:
-        seam_verts = [4]
-    # label face verts with geodesic distances
-    point_verts_dict = {}
-    for p in prims:
-        for i in f[p]:
-            if i not in point_verts_dict:
-                point_verts_dict[i] = 0
-    pt_list = list(point_verts_dict.keys())
-    print("num_verts, keys:", len(v), len(pt_list))
-    # d = ig.exact_geodesic(v, f,   toArray(seam_verts, np.int32), toArray(pt_list, np.int32),None, None)
-    # print("c")
-    pt_list1 = pt_list[:int(len(pt_list)/2)]
-    pt_list2 = pt_list[int(len(pt_list)/2):]
-
-    d1 = ig.exact_geodesic(v, f, np.array(seam_verts, dtype=np.int32), np.array(pt_list1, dtype=np.int32), None, None)
-    d2 = ig.exact_geodesic(v, f, np.array(seam_verts, dtype=np.int32), np.array(pt_list2, dtype=np.int32), None, None)
-    print("distances:", len(d1)+len(d2))
-    for di, pi in zip(d1, pt_list1):
-        point_verts_dict[pi] = di
-    for di, pi in zip(d2, pt_list2):
-        point_verts_dict[pi] = di
-    # label points with interpolated distances
-    labeled_points = []
-    for pt, prim, b   in zip(unlabeled_points, prims, bary):
-        l = sum([float(b[i]) * point_verts_dict[vidx] for i, vidx in enumerate(f[prim])])
-        pt = list(pt)
-        pt.append(l)
-        labeled_points.append(pt)
-    if test_run:
-        print("source:", toArray(pt_list, np.int32), "dest", toArray(seam_verts, np.int32))
-        print("dist:", d, "pts", pt_list)
-        print(labeled_points)
-
-    np.savetxt(ptfile, np.array(labeled_points), delimiter=", ")
 
 
 def resample_directory(d, o, m, exclusion_list):
@@ -549,10 +482,13 @@ def load_seams(f,m):
 
 
 if __name__ == "__main__":
+    run_extract_seams("/home/theresa/p/datav7_obj/310.obj", 310)
     meshes = "/home/theresa/p/datav7_obj/"
-    # extract_seams(None, None)
+
     for m in os.listdir(meshes):
-        run_extract_seams(meshes+m)
+        ind = int(m.split(".")[0])
+        run_extract_seams(meshes + m, ind)
+
     v = str(sys.argv[1])
     c = v.split("/")
     c = c[-2] + c[-1]
