@@ -25,16 +25,40 @@ def stack(a, num=5):
   for i in range(num):
     output.append(a)
   return np.array(output)
-def _load_data_file(name):
-    f = h5py.File(name)
-    data = f["data"][:]
-    label = f["labels"][:]
-    index = f["index"][:]
-    data = data[:, :, :]
-    # data = np.array(stack(data))
-    label = label[:,:]
-    # label = np.array(stack(label))
-    return data, label, index
+
+class Uvloader(data.Dataset):
+    def __init__(self, points, labels, dists, ind):
+        super().__init__()
+        self.points = np.array(points)
+        self.labels = np.array(labels)
+        self.dists = np.array(dists)
+        self.ind = np.array(ind)
+
+    def __getitem__(self, idx):
+        pt_idxs = np.arange(0, self.points[0].shape[0])
+        pt_idxs = np.random.choice(pt_idxs, 4000, replace=False)
+
+        np.random.shuffle(pt_idxs)
+
+        current_points = torch.from_numpy(self.points[idx, pt_idxs].copy()).type(
+            torch.FloatTensor
+        )
+        current_labels = torch.from_numpy(self.labels[idx, pt_idxs].copy(
+
+        )).type(
+            torch.FloatTensor
+        )
+
+        current_dists = torch.from_numpy(self.dists[idx, pt_idxs].copy()).type(
+            torch.FloatTensor
+        )
+        current_index = self.ind[idx].copy()
+
+        return current_points, current_labels, current_dists, current_index
+
+
+    def __len__(self):
+        return int(self.points.shape[0])
 
 
 class Indoor3DSemSeg(data.Dataset):

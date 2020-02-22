@@ -37,42 +37,32 @@ def read_point_cloud(filename, stats):
     return np.array(points), np.array(distances), stats
 
 
-def read_n_point_clouds(d):
+def read_point_clouds(d):
     overall_points, overall_distances, index_names_train = [], [], []
     test_points, test_distances, index_names_test = [], [], []
     stats = []
     for ff in os.listdir(d):
-        if ff != '.csv':
+        if ff != '.csv' and ff[0] != '.':
             # sub = os.path.join(d, ff)
             filename = os.path.join(d, ff)
             name, _ = ff.split(".")
             r = random.random()
             file_index = int(name)
-            if r < .85:
             #if file_index not in test:
                 # for fi in os.listdir(sub):
-                points, distances, stats = read_point_cloud(filename, stats)
-                file_index = int(name)
-                overall_points.append(points[:npoints])
-                overall_distances.append(distances[:npoints])
-                index_names_train.append(file_index)
-            else:
-                # for fi in os.listdir(sub):
-                points, distances, stats = read_point_cloud(filename, stats)
-                file_index = int(name)
-                test_points.append(points[:npoints])
-                test_distances.append(distances[:npoints])
-                index_names_test.append(file_index)
+            points, distances, stats = read_point_cloud(filename, stats)
+            file_index = int(name)
+            overall_points.append(points[:npoints])
+            overall_distances.append(distances[:npoints])
+            index_names_train.append(file_index)
+
 
     print("stats:", sum(stats) / float(len(stats)), min(stats), max(stats))
     # print([len(o) for o in overall_points])
     overall_points = np.stack(overall_points, axis=0)
     overall_distances = np.stack(overall_distances, axis=0)
-    test_points = np.stack(test_points, axis=0)
-    test_distances = np.stack(test_distances, axis=0)
     index_names_train = np.stack(index_names_train, axis=0)
-    index_names_test = np.stack(index_names_test, axis=0)
-    return overall_points, overall_distances, test_points, test_distances, index_names_train, index_names_test
+    return overall_points, overall_distances, index_names_train
 
 
 def write_to_h5py(overall_points, overall_distances, index, nm):

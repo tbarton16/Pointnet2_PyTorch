@@ -12,95 +12,100 @@ from collections import namedtuple
 torch.manual_seed(0)
 from pointnet2.utils.pointnet2_modules import PointnetFPModule, PointnetSAModuleMSG
 
-
+Verbose = True
+low_dist = 0.03
 import os
 
-def plot_points(output_folder, points, scores, name, epoch, Index = None, use_index = False):
-    save_folder = f"./generated_shapes_debug/{output_folder}/"
-    if not os.path.isdir(save_folder):
-        os.makedirs(save_folder)
-    save_folder += name
-    if not os.path.isdir(save_folder):
-        os.makedirs(save_folder)
+def plot_points(output_folder, points, scores, dists, index):
+    if not os.path.isdir(output_folder):
+        os.makedirs(output_folder)
     for batch, cloud in enumerate(points):
         score = scores[batch]
-        fname = save_folder + "/{}.csv".format(str(Index[batch].item() if use_index else 2*abs(epoch) + batch))
+        dist = dists[batch]
+        fname = output_folder + "/{}.csv".format(str(index[batch].item()))
         with open(fname, 'w+') as f:
             for point_index in range(cloud.shape[0]):
-                f.write("{},{},{},{}\n".format(cloud[point_index, 0], cloud[point_index, 1],
-                                               cloud[point_index, 2], score[point_index].item()))
-
+                f.write(f"{cloud[point_index, 0]},"
+                        f"{cloud[point_index, 1]},"
+                        f"{cloud[point_index, 2]},"
+                        f"{cloud[point_index, 3]},"
+                        f"{cloud[point_index, 4]},"
+                        f"{cloud[point_index, 5]},"
+                        f"{score[point_index].item()},"
+                        f"{dist[point_index].item()}\n" )
 
 def isfinite(x):
-    """
-    Quick pytorch test that there are no nan's or infs.
-
-    note: torch now has torch.isnan
-    url: https://gist.github.com/wassname/df8bc03e60f81ff081e1895aabe1f519
-    """
     not_inf = ((x + 1) != x)
     not_nan = (x == x)
     return not_inf & not_nan
-
-
 
 def model_fn_decorator(criterion):
     ModelReturn = namedtuple("ModelReturn", ["preds", "loss", "acc"])
 
     def model_fn(model, data, epoch=0, eval=False, pfx="", results_folder=""):
+
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
         with torch.set_grad_enabled(not eval):
-            inputs, labels, index = data
-            inputs = inputs.to("cuda", non_blocking=True)
-            labels = labels.to("cuda", non_blocking=True)
+            inputs, labels, dists, index = data
+            inputs = inputs.to(device)
+            labels = labels.to(device)
 
             preds = model(inputs)
-            loss = criterion(preds.view(labels.numel(), -1), labels.view(-1))
-            _, classes = torch.max(preds, -1)
-            # print("classes", classes.shape)
-            # print("preds", preds[:,:,0].shape)
+            preds = preds.squeeze()
+            loss = criterion(preds.view(-1), labels.view(-1))
+            if Verbose:
+                print("loss:", loss.item())
+            preds_probabilities = torch.sigmoid(preds)
+            x = torch.ones_like(preds_probabilities).to(device)
+            y = torch.zeros_like(preds_probabilities).to(device)
+            classes = torch.where(
+                preds_probabilities>torch.Tensor([0.5]).to(device), y, x)
             acc = (classes == labels).float().sum() / labels.numel()
-            # counter += 1
-            # if counter == 100:
-            #     print(loss, acc)
-            #     counter = 0
+            inputs = inputs.cpu().numpy()
+            labels = labels.cpu().numpy()
+            index = index.numpy()
+            # Plotting
+            gt_folder_name = "eval_target" if eval else "target"
+            pred_folder_name = "eval_preds" if eval else "preds"
 
-            # print("labels:", labels)
-            if not isfinite(loss):
-                print(isfinite(preds))
-                print(preds, labels)
-                # print("inputs:", inputs)
-                assert isfinite(loss)
+            if (eval or (epoch % 10 == 0)) and Verbose:
+                plot_points(f"{results_folder}/points/{gt_folder_name}",
+                            inputs, labels, dists, index)
+                plot_points(f"{results_folder}/points/{pred_folder_name}",
+                            inputs, preds_probabilities, dists, index)
+        results_dict = {"acc": acc.item(), "loss": loss.item()}
+        if eval:
+            calculate_pa(classes, dists, results_dict)
 
-            # print("writing")
-            # print("classes:", classes)
+        if Verbose:
+            print("acc", acc.item())
 
-            # print(inputs.shape)
-            if epoch < 0:
-                plot_points(results_folder, inputs, preds[:,:,0], pfx, epoch, index, True)
-                plot_points(results_folder, inputs, labels, pfx + "gt", epoch, index, True)
-            elif not eval and epoch%10 == 0:
-
-                inputs = inputs.cpu().numpy()
-                labels = labels.cpu().numpy()
-                classes = classes.cpu().numpy()
-                plot_points(results_folder, inputs, labels, "target", epoch)
-                plot_points(results_folder, inputs, preds[:,:,0], "preds", epoch)
-            if eval:
-                inputs = inputs.cpu().numpy()
-                labels = labels.cpu().numpy()
-                classes = classes.cpu().numpy()
-                plot_points(results_folder, inputs, labels, "eval_target", epoch)
-                plot_points(results_folder, inputs, preds[:,:,0], "eval_preds", epoch)
-
-        return ModelReturn(preds, loss, {"acc": acc.item(), "loss": loss.item()})
+        return ModelReturn(preds_probabilities, loss, results_dict)
 
     return model_fn
 
 
+def calculate_pa(classes, dists, results_dict):
+    results_dict["precision"] = 0.
+    results_dict["recall"] = 0.
+    for batch in range(classes.shape[0]):
+        res = [dists[batch, i].item() for i, val in enumerate(classes[
+                                                                  batch].cpu().numpy())
+               if val == 1]
+        cls = [classes[batch].cpu().numpy()[i].item() for i, val in
+               enumerate(dists[batch].numpy()) if val <= low_dist]
+        cls_cor = [c for c in cls if c == 1]
+        results_dict["precision"] += 0. if len(res) == 0 else sum(
+            res) / float(
+            len(res)) / float(classes.shape[0])
+        results_dict["recall"] += 0. if len(cls) == 0 else len(
+            cls_cor) / float(
+            len(cls)) / float(classes.shape[0])
 class Pointnet2MSG(nn.Module):
     r"""
         PointNet2 with multi-scale grouping
-        Semantic segmentation network that uses feature propogation layers
+        Semantic segmentation network that uses feature propagation layers
 
         Parameters
         ----------
@@ -176,7 +181,7 @@ class Pointnet2MSG(nn.Module):
             pt_utils.Seq(128)
             .conv1d(128, bn=True)
             # .dropout()
-            .conv1d(num_classes, activation=None)
+            .conv1d(1, activation=None)
         )
 
     def _break_up_pc(self, pc):

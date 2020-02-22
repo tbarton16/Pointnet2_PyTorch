@@ -357,10 +357,10 @@ def vert_knn(ftop, idxtofacenn, v2f, sampled_points, k=5,seam_threshold=0, dista
     return labeled_verts
 
 
-def run_extract_seams(mesh="/home/theresa/p/data_v8/053.obj", ind=53):
+def run_extract_seams(mesh, gt, ind=310):
     seam_file = f"/home/theresa/p/vert_pred/{ind}.txt"
-    seams = f"/home/theresa/p/groundtruthseam/{ind}.csv"
-    extract_seams(pts=seams, mesh=mesh, outfile = seam_file)
+    # seams = f"/home/theresa/p/groundtruthseam/{ind}.csv"
+    extract_seams(pts=gt, mesh=mesh, outfile=seam_file)
 
 
 def extract_seams(pts, mesh, outfile):
@@ -394,8 +394,10 @@ def extract_seams(pts, mesh, outfile):
     # print("v2f:", v2f)
     labeled_verts = vert_knn(ftop, idxtofacenn, v2f, v, k=3, distance_threshold=.03)
     vert_w = []
+    vert_debug =[]
     for i , _ in enumerate(v):
         vert_w.append(list(labeled_verts[i])[-1])
+        vert_debug.append(list(labeled_verts[i]))
     # G = nx.Graph()
     # def add_tri(t):
     #     for x, y in [(0,1), (1,2), (2,0)]:
@@ -422,6 +424,8 @@ def extract_seams(pts, mesh, outfile):
     with open(outfile, "w") as f:
         for i in vert_w:
             f.write(str(i) +"\n")
+    np.savetxt(outfile+"debug.txt", vert_debug, delimiter=",")
+
 
     return None
 
@@ -482,7 +486,7 @@ def load_seams(f,m):
 
 
 if __name__ == "__main__":
-    run_extract_seams("/home/theresa/p/datav7_obj/310.obj", 310)
+    run_extract_seams("/home/theresa/p/data_v8_obj/310.obj", "/home/theresa/p/groundtruthseam/310.csv")
     meshes = "/home/theresa/p/datav7_obj/"
 
     for m in os.listdir(meshes):
