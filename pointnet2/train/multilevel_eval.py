@@ -1,212 +1,218 @@
-from __future__ import (
-    division,
-    absolute_import,
-    with_statement,
-    print_function,
-    unicode_literals,
-)
 import torch
 import torch.optim as optim
 import torch.optim.lr_scheduler as lr_sched
-import torch.nn as nn
 from torch.utils.data import DataLoader
+import torch.nn as nn
+from tensorboardX import SummaryWriter
 import sys
-from datetime import datetime
 
 sys.path.append("/home/tbarton/Pointnet2_PyTorch/")
 import etw2.etw_pytorch_utils as pt_utils
-import pprint
-import os.path as osp
 import os
 import argparse
 
 torch.manual_seed(0)
-from generate_fake_data import run
+from generate_fake_data import read_point_clouds
 from pointnet2.models import Pointnet2SemMSG as Pointnet
 from pointnet2.models.pointnet2_msg_sem import model_fn_decorator
-from pointnet2.data import Indoor3DSemSeg
+from pointnet2.train.train_sem_seg import image_grid, load_data, eval_model
+import numpy as np
+import random
+from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 unused import
+import matplotlib.pyplot as plt
 
-parser = argparse.ArgumentParser(description="Arg parser")
-parser.add_argument(
-    "-batch_size", type=int, default=2, help="Batch size [default: 32]"
-)
-parser.add_argument(
-    "-num_points",
-    type=int,
-    default=4096,
-    help="Number of points to train with [default: 4096]",
-)
-parser.add_argument(
-    "-fst",
-    type=str,
-    default="test",
-    help="Number of points to train with [default: 4096]",
-)
-parser.add_argument(
-    "-snd",
-    type=str,
-    default="test",
-    help="Number of points to train with [default: 4096]",
-)
-parser.add_argument(
-    "-trd",
-    type=str,
-    default="test",
-    help="Number of points to train with [default: 4096]",
-)
-parser.add_argument(
-    "-data_train",
-    type=str,
-    default="/home/theresa/p/datav2balancedtrain.h5",
-    help="Number of points to train with [default: 4096]",
-)
-parser.add_argument(
-    "-data_test",
-    type=str,
-    default="/home/theresa/p/datav2balancedtest.h5",
-    help="Number of points to train with [default: 4096]",
-)
-parser.add_argument(
-    "-weight_decay",
-    type=float,
-    default=0,
-    help="L2 regularization coeff [default: 0.0]",
-)
-parser.add_argument(
-    "-lr", type=float, default=1e-4, help="Initial learning rate [default: 1e-2]"
-)
-parser.add_argument(
-    "-lr_decay",
-    type=float,
-    default=0.5,
-    help="Learning rate decay gamma [default: 0.5]",
-)
-parser.add_argument(
-    "-decay_step",
-    type=float,
-    default=2e5,
-    help="Learning rate decay step [default: 20]",
-)
-parser.add_argument(
-    "-bn_momentum",
-    type=float,
-    default=0.9,
-    help="Initial batch norm momentum [default: 0.9]",
-)
-parser.add_argument(
-    "-bn_decay",
-    type=float,
-    default=0.5,
-    help="Batch norm momentum decay gamma [default: 0.5]",
-)
-parser.add_argument(
-    "-checkpoint", type=bool, default=True, help="Checkpoint to start from"
-)
-parser.add_argument(
-    "-epochs", type=int, default=1000, help="Number of epochs to train for"
-)
-parser.add_argument(
-    "-run_name",
-    type=str,
-    default="sem_seg_run_1",
-    help="Name for run in tensorboard_logger",
-)
-parser.add_argument("--visdom-port", type=int, default=8097)
-parser.add_argument("--visdom", action="store_true")
-
+outpath = "model_output"
+data_path = "data"
+VERBOSE = False
 lr_clip = 1e-5
 bnm_clip = 1e-2
+max_evalimages = 1
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def evaluate_step(args, input_name, input_path, checkpoint_name,
-                  best_checkpoint_name, output_name, file_test = None, file_train = None):
-    # input_name is the directory name in gsd that contains the files that the network must process.
-    # input_path is the full path to the files
-    outpath= f"/home/theresa/Pointnet2_PyTorch/pointnet2/generated_shapes_debug/"
-    if file_test and file_train:
-        pass
-    else:
-        file_test = f"generated_shapes_debug/{input_name}test.h5"
-        file_train = f"generated_shapes_debug/{input_name}train.h5"
-        # if not os.path.exists(file_test):
-        # make train and test files
-        run(input_name,
-            inpath=input_path,
-            outpath=outpath)
-    test_set = Indoor3DSemSeg(args.num_points, file_test, train=False)
-    test_loader = DataLoader(
-        test_set,
-        batch_size=args.batch_size,
-        shuffle=True,
-        pin_memory=True,
-        num_workers=2,
-    )
-    train_set = Indoor3DSemSeg(args.num_points, file_train)
-    train_loader = DataLoader(
-        train_set,
-        batch_size=args.batch_size,
-        pin_memory=True,
-        num_workers=2,
-        shuffle=True,
-    )
-    model = Pointnet(num_classes=2, input_channels=0, use_xyz=True)
-    model.cuda()
-    optimizer = optim.Adam(
-        model.parameters(), lr=args.lr, weight_decay=args.weight_decay
-    )
 
-    _ = pt_utils.load_checkpoint(
-        model, optimizer, filename=checkpoint_name.split(".")[0]
-    )
+def log_print(s, of):
+    with open(of, 'a') as f:
+        f.write(f"{s}\n")
+    print(s)
 
-    weight = torch.tensor([.58, .42])
-    model_fn = model_fn_decorator(nn.CrossEntropyLoss(weight=weight.cuda()))
 
-    evaluator = pt_utils.Eval(
-        model,
-        model_fn,
-        results_folder=output_name
-    )
-    print(len(train_loader), len(test_loader))
-    _ = evaluator.eval_epoch(test_loader, "test_guesses1")
-    _ = evaluator.eval_epoch(test_loader, "test_guesses2")
-    _ = evaluator.eval_epoch(test_loader, "test_guesses3")
-    # TODO resample points
-    pts = {}
-    import numpy as np
-    for i in range(1,4):
-        path = outpath + "00152020-01-09T08/" + f"test_guesses{i}"
-        for p in os.path.listdir(path):
-            csv = np.genfromtext(path + "/" + p, dtype=np.float64, delimiter=",")
+def loadConfigFile(exp_name):
+    args = None
+    with open(f"{outpath}/{exp_name}/config.txt") as f:
+        for line in f:
+            args = eval(line)
 
+    assert args is not None, 'failed to load config'
+    return args
+
+
+
+
+def writeConfigFile(args):
+    os.system(f'mkdir {outpath} > /dev/null 2>&1')
+    os.system(f'mkdir {outpath}/{args.exp_name} > /dev/null 2>&1')
+    os.system(f'mkdir {outpath}/{args.exp_name}/plots > /dev/null 2>&1')
+    os.system(f'mkdir {outpath}/{args.exp_name}/points > /dev/null 2>&1')
+    os.system(f'mkdir {outpath}/{args.exp_name}/models > /dev/null 2>&1')
+    with open(f"{outpath}/{args.exp_name}/config.txt", "w") as f:
+        f.write(f"{args}\n")
+
+
+def run_train(exp_name, checkpoints, dataset, rd_seed, holdout_perc, batch_size,
+              load_epochs=None, n_epochs=200, eval_frequency=20):
+    random.seed(rd_seed)
+    np.random.seed(rd_seed)
+    torch.manual_seed(rd_seed)
+    train_loader, test_loader = load_data(dataset, results_folder,
+                                          holdout_perc, batch_size,
+                                          exp_names[0])
+    for net, load_epoch in zip(checkpoints, load_epochs):
+        input_folder = f"{outpath}/{net}"
+        checkpoint_name = lambda e: f"{input_folder}/models/eval_epoch_{e}.ckpt"
+        best_checkpoint_name = lambda \
+            e: f"{input_folder}/models/eval_epoch_{e}_best.ckpt"
+    # writer = SummaryWriter(f"runs/{exp_name}") if \
+    #     load_epoch is None else SummaryWriter(f"runs"
+    #                                           f"/{exp_name + str(load_epoch)}")
+
+
+        print('training ...')
+        lr_lbmd = lambda it: max(
+            args.lr_decay ** (int(it * args.batch_size / args.decay_step)),
+            lr_clip / args.lr,
+        )
+        bnm_lmbd = lambda it: max(
+            args.bn_momentum
+            * args.bn_decay ** (int(it * args.batch_size / args.decay_step)),
+            bnm_clip,
+        )
+
+        # default value
+        it = -1  # for the initialize value of `LambdaLR` and `BNMomentumScheduler`
+        best_loss = 1e10
+
+        model = Pointnet(num_classes=2, input_channels=3, use_xyz=True).to(device)
+        optimizer = optim.Adam(model.parameters(), lr=args.lr,
+                               weight_decay=args.weight_decay)
+
+        if load_epoch is not None:
+            file_name = checkpoint_name(load_epoch)
+            loading_results = pt_utils.load_checkpoint(model, optimizer, file_name)
+            if loading_results is None:
+                raise IOError("Unable to create file {}".format(file_name))
+            it, epoch, best_percentage = loading_results
+
+        lr_scheduler = lr_sched.LambdaLR(optimizer, lr_lambda=lr_lbmd,
+                                         last_epoch=it)
+        bnm_scheduler = pt_utils.BNMomentumScheduler(model, bn_lambda=bnm_lmbd,
+                                                     last_epoch=it)
+
+        it = max(it, 0)  # for the initialize value of `trainer.train`
+        val_it = 0
+        weight = torch.tensor([.58, .42])
+        if args.one_class:
+            loss_func = torch.nn.BCEWithLogitsLoss()
+        else:
+            loss_func = nn.CrossEntropyLoss(weight=weight.cuda())
+
+        model_fn = model_fn_decorator(loss_func)
+
+        for batch in train_loader:
+            model.eval()
+            if bnm_scheduler is not None:
+                bnm_scheduler.step(it)
+
+
+            preds, loss, eval_res = model_fn(model, batch,
+                                             results_folder=results_folder)
+            it += 1
+
+
+
+            if test_loader is not None:
+                val_loss, res = eval_model(model, model_fn, test_loader,
+                                           epoch, results_folder, writer)
+
+                is_best = val_loss < best_loss
+                best_loss = min(best_loss, val_loss)
+
+
+def eval_model(model, model_fn, d_loader, epoch, results_folder, writer):
+    model.eval()
+
+    eval_dict = {}
+    total_loss = 0.0
+    count = 1.0
+    for i, data in enumerate(d_loader):
+        preds, loss, eval_res = model_fn(model, data, eval=True, epoch=epoch,
+                                         results_folder=results_folder)
+
+        total_loss += loss.item()
+        count += 1
+
+        for k, v in eval_res.items():
+            if v is not None:
+                eval_dict[k] = eval_dict.get(k, 0) + v
+        if i < max_evalimages:
+            eval_dict["data"] = eval_dict.get("data", []) + [data]
+            eval_dict["preds"] = eval_dict.get("preds", []) + [preds]
+
+    return total_loss / count, eval_dict
 
 
 if __name__ == "__main__":
-    # python3 train/multilevel_eval.py -snd 00152020-01-06T08 -trd 00132020-01-06T13
-    tm = datetime.now().isoformat()
-    tm = tm[:-13]
-    args = parser.parse_args()
-    # load initial data and first (fst)
-    # checkpoint_name = "checkpoints/coarsetocoarse/" + "pointnet2_semseg.pth.tar"
-    # best_name = "checkpoints/coarsetocoarse/" + "pointnet2_semseg_best.pth.tar"
-    # evaluate_step(args, "", "", output_name = f"fst_{args.fst}",
-    #               checkpoint_name=checkpoint_name, best_checkpoint_name=best_name, file_test=args.data_test,
-    #               file_train = args.data_train)
-    checkpoint_name = f"checkpoints/pointnet2_{args.snd}.pth.tar"
-    best_name = f"checkpoints/pointnet2_{args.snd}best.pth.tar"
-    input_path = f"/home/theresa/Pointnet2_PyTorch/pointnet2/generated_shapes_debug/fst_{args.fst}/traintest_guesses/"
-    input_path = f"/home/theresa/Pointnet2_PyTorch/pointnet2/generated_shapes_debug/fst_{args.fst}+resampled/"
-    #moving onto second model
-    evaluate_step(args, f"fst_{args.fst}",
-                  input_path,
-                  checkpoint_name=checkpoint_name, best_checkpoint_name=best_name,
-                  output_name = f"snd_{args.snd}")
+    parser = argparse.ArgumentParser(description="Arg parser")
+    parser.add_argument('-en1', '--exp_name_1', help='name of experiment',
+                        type=str)
+    parser.add_argument('-en2', '--exp_name_2', help='name of experiment',
+                        type=str)
+    parser.add_argument('-mn', '--model_name', default=None,
+                        help='name of the model used for evaluation, do not specify for model_name == exp_name',
+                        type=str)
+    parser.add_argument('-d', '--dataset', help='dataset to use', type=str)
+    parser.add_argument("-batch_size", type=int, default=2,
+                        help="Batch size [default: 32]")
+    parser.add_argument("-num_points", type=int, default=4000,
+                        help="Number of points to train with [default: 4096]", )
+    parser.add_argument("-weight_decay", type=float, default=0,
+                        help="L2 regularization coeff [default: 0.0]", )
+    parser.add_argument("-lr", type=float, default=1e-4,
+                        help="Initial learning rate [default: 1e-2]")
+    parser.add_argument("-lr_decay", type=float, default=0.5,
+                        help="Learning rate decay gamma [default: 0.5]", )
+    parser.add_argument("-decay_step", type=float, default=2e5,
+                        help="Learning rate decay step [default: 20]", )
+    parser.add_argument("-bn_momentum", type=float, default=0.9,
+                        help="Initial batch norm momentum [default: 0.9]", )
+    parser.add_argument("-bn_decay", type=float, default=0.5,
+                        help="Batch norm momentum decay gamma [default: 0.5]", )
+    parser.add_argument("-epochs", type=int, default=1000,
+                        help="Number of epochs to train for")
+    parser.add_argument('-m', '--mode', default="load", type=str)
+    parser.add_argument('-le1', '--load_epoch_1', default=None, type=int)
+    parser.add_argument('-le2', '--load_epoch_2', default=None, type=int)
 
-    # third and final model
-    # checkpoint_name = f"checkpoints/pointnet2_{args.trd}.pth.tar"
-    # best_name = f"checkpoints/pointnet2_{args.trd}best.pth.tar"
-    #
-    # evaluate_step(args, f"snd_{args.snd}",
-    #               f"/home/theresa/Pointnet2_PyTorch/pointnet2/"
-    #               f"generated_shapes_debug/snd_{args.snd}/traintest_guesses/",
-    #               checkpoint_name=checkpoint_name, best_checkpoint_name=best_name,
-    #               output_name = f"trd_{args.trd}")
+    parser.add_argument('-rd', '--rd_seed', default=42, type=int)
+    parser.add_argument('-ho', '--holdout_perc', default=.1, type=float)
+    parser.add_argument('-oc', '--one_class', default=True, type=bool)
+    parser.add_argument('-ti', '--train_idx',
+                        default="model_output/1class/train_idx.txt", type=str)
+    parser.add_argument('-si', '--test_idx',
+                        default="model_output/1class/test_idx.txt", type=str)
+
+    args = parser.parse_args()
+    if args.mode == "load":
+        if not args.load_epoch:
+            raise IOError
+        en=[args.exp_name_1, args.exp_name_2]
+        le = [args.load_epoch_1, args.load_epoch_2]
+        run_train(
+            en, args.dataset, args.rd_seed, args.holdout_perc,
+            args.batch_size, le
+        )
+    # if args.mode == "train":
+    #     writeConfigFile(args)
+    #     run_train(
+    #         args.exp_name, args.dataset, args.rd_seed, args.holdout_perc,
+    #         args.batch_size, args.load_epoch
+    #     )

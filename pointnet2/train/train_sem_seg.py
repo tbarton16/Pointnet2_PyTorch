@@ -85,21 +85,7 @@ def writeConfigFile(args):
     with open(f"{outpath}/{args.exp_name}/config.txt", "w") as f:
         f.write(f"{args}\n")
 
-
-def run_train(exp_name, dataset, rd_seed, holdout_perc, batch_size,
-              load_epoch=None, n_epochs=200, eval_frequency=20):
-
-    random.seed(rd_seed)
-    np.random.seed(rd_seed)
-    torch.manual_seed(rd_seed)
-    # c = args.v.split("/")
-    # c = c[-2] + c[-1]
-
-    results_folder = f"{outpath}/{exp_name}"
-    checkpoint_name = lambda e: f"{results_folder}/models/eval_epoch_{e}.ckpt"
-    best_checkpoint_name = lambda e: f"{results_folder}/models/eval_epoch_{e}_best.ckpt"
-    writer = SummaryWriter(f"runs/{exp_name}")
-
+def load_data(dataset, results_folder, holdout_perc, batch_size, exp_name):
     pc, dists, idx_gt = read_point_clouds(f"{data_path}/{dataset}/")
     # print(pc[0])
     pc_t, dists_t, idx_t = [], [], []
@@ -107,7 +93,7 @@ def run_train(exp_name, dataset, rd_seed, holdout_perc, batch_size,
         cloud = pc[i]
         new_cloud = []
         new_dists = []
-        for d,j in zip(dists[i],cloud):
+        for d, j in zip(dists[i], cloud):
             if j[0] > 0:
                 new_cloud.append(j)
                 new_dists.append(d)
@@ -121,46 +107,86 @@ def run_train(exp_name, dataset, rd_seed, holdout_perc, batch_size,
             exclude_idx.append(i)
         elif len(pc_t[i]) < max_pts:
             max_pts = len(pc_t[i])
-    pc_t = [pc[:max_pts] for i,pc in enumerate(pc_t) if i not in exclude_idx]
-    dists_t = [dc[:max_pts] for i,dc in enumerate(dists_t) if i not in exclude_idx]
-    idx_t = [ic for i,ic in enumerate(idx_gt) if i not in exclude_idx]
+    pc_t = [pc[:max_pts] for i, pc in enumerate(pc_t) if i not in exclude_idx]
+    dists_t = [dc[:max_pts] for i, dc in enumerate(dists_t) if
+               i not in exclude_idx]
+    idx_t = [ic for i, ic in enumerate(idx_gt) if i not in exclude_idx]
 
-    # x_gt_0 = np.where(pc[:, :, 0] > 0., True, False)
-    # # print(x_gt_0)
-    # # print(x_gt_0.shape)
-    # pc = pc[x_gt_0]
-    # dists = dists[x_gt_0]
-    # print(pc.shape, dists.shape)
     points_labels_index = list(zip(pc_t, dists_t, idx_t))
-    random.shuffle(points_labels_index)
-    pc, dists, idx_gt = zip(*points_labels_index)
-    print(len(pc), len(dists))
-    train_num = int((len(pc) * (1.0 - holdout_perc)) + .5)
-    val_num = len(pc) - train_num
-    # print(len(dists[0]))
-    train_dist = dists[:train_num]
-    thresh = np.median(np.array(train_dist), axis=1, keepdims=True)
-    log_print(f"train median{ np.median(thresh, axis=0)}", f"{outpath}/{exp_name}/log.txt")
-    print(thresh.shape)
-    thresh = np.broadcast_to(np.median(thresh, axis=0), np.array(dists).shape)
-    labels = np.where(dists > thresh, 1., 0.)
-    log_print(f"% train above{ np.average(np.sum(labels, axis=1) / labels.shape[1], axis=0)}", f"{outpath}/{exp_name}/log.txt")
-    points_labels_index = list(zip(pc, labels, dists, idx_gt))
+    if args.train_idx and args.test_idx:
+        pc, dists, idx_gt = zip(*points_labels_index)
+        ti = list(np.genfromtxt(args.train_idx, dtype=np.int32, delimiter=","))
+        si = list(np.genfromtxt(args.test_idx, dtype=np.int32, delimiter=","))
+        train = [pli for pli in points_labels_index if pli[2] in ti]
+        test = [pli for pli in points_labels_index if pli[2] in si]
+        train_points, train_dist, train_idx = zip(*train)
+        test_points, test_dist, test_idx = zip(*test)
+
+    else:
+        random.shuffle(points_labels_index)
+        train_num = int((len(pc_t) * (1.0 - holdout_perc)) + .5)
+        train = points_labels_index[:train_num]
+        test = points_labels_index[train_num:]
+        train_points, train_dist, train_idx = zip(*train)
+        test_points, test_dist, test_idx = zip(*test)
+
+    train_thresh = np.median(np.array(train_dist), axis=1, keepdims=True)
+    log_print(f"train median{np.median(train_thresh, axis=0)}", f"{outpath}/"
+                                                                f"{exp_name}/log.txt")
+
+    # Use train_thresh for both to avoid cheating
+    train_thresh = np.broadcast_to(np.median(train_thresh, axis=0), np.array(
+        train_dist).shape)
+    test_thresh = np.broadcast_to(np.median(train_thresh, axis=0), np.array(
+        test_dist).shape)
+
+    train_labels = np.where(train_dist > train_thresh, 1., 0.)
+    test_labels = np.where(test_dist > test_thresh, 1., 0.)
+
+    train_above = np.average(np.sum(train_labels, axis=1) / train_labels.shape[
+        1], axis=0)
+    log_print(f"% train above{train_above}", f"{outpath}/{exp_name}/log.txt")
+
+    test_above = np.average(np.sum(test_labels, axis=1) / test_labels.shape[1],
+                            axis=0)
+    log_print(f"% test above{test_above}", f"{outpath}/{exp_name}/log.txt")
 
     log_print(f"Training indices:", f"{outpath}/{exp_name}/log.txt")
-    for _, _, _, ind in points_labels_index[:train_num]:
+    for ind in train_idx:
         log_print(f"{ind}", f"{outpath}/{exp_name}/log.txt")
 
     log_print(f"Validation indices:", f"{outpath}/{exp_name}/log.txt")
-    for _, _, _, ind in points_labels_index[train_num:]:
+    for ind in test_idx:
         log_print(f"{ind}", f"{outpath}/{exp_name}/log.txt")
-    train_loader = DataLoader(Uvloader(*zip(*points_labels_index[:train_num])),
-                               batch_size=2, shuffle=True)
-    test_loader =  DataLoader(Uvloader(*zip(*points_labels_index[train_num:])),
-                               batch_size=2, shuffle=True)
-    
-    log_print(f"Training size: {train_num}", f"{outpath}/{exp_name}/log.txt")
-    log_print(f"Validation size: {val_num}", f"{outpath}/{exp_name}/log.txt")
+    train_loader = DataLoader(Uvloader(train_points, train_labels,
+                                       train_dist, train_idx),
+                              batch_size=2, shuffle=True)
+    test_loader = DataLoader(Uvloader(test_points, test_labels,
+                                      test_dist, test_idx),
+                             batch_size=2, shuffle=True)
+
+    log_print(f"Training size: {len(train_idx)}", f"{outpath}"
+                                                  f"/{exp_name}/log.txt")
+    log_print(f"Validation size: {len(test_idx)}", f"{outpath}"
+                                                   f"/{exp_name}/log.txt")
+    return train_loader, test_loader
+
+def run_train(exp_name, dataset, rd_seed, holdout_perc, batch_size,
+              load_epoch=None, n_epochs=200, eval_frequency=20):
+
+    random.seed(rd_seed)
+    np.random.seed(rd_seed)
+    torch.manual_seed(rd_seed)
+
+    results_folder = f"{outpath}/{exp_name}"
+    checkpoint_name = lambda e: f"{results_folder}/models/eval_epoch_{e}.ckpt"
+    best_checkpoint_name = lambda e: f"{results_folder}/models/eval_epoch_{e}_best.ckpt"
+    writer = SummaryWriter(f"runs/{exp_name }") if \
+        load_epoch is None else SummaryWriter(f"runs"
+                                            f"/{exp_name + str(load_epoch)}")
+    train_loader, test_loader = load_data(dataset, results_folder,
+                                          holdout_perc, batch_size, exp_name)
+
 
     print('training ...')
     lr_lbmd = lambda it: max(
@@ -193,15 +219,20 @@ def run_train(exp_name, dataset, rd_seed, holdout_perc, batch_size,
     it = max(it, 0)  # for the initialize value of `trainer.train`
     val_it = 0
     weight = torch.tensor([.58, .42])
+    if args.one_class:
+        loss_func = torch.nn.BCEWithLogitsLoss()
+    else:
+        loss_func = nn.CrossEntropyLoss(weight=weight.cuda())
 
-    # loss_func = nn.CrossEntropyLoss(weight=weight.cuda())
-    loss_func = torch.nn.BCEWithLogitsLoss()
 
     model_fn = model_fn_decorator(loss_func)
 
     for epoch in range(n_epochs):
         for batch in train_loader:
-            model.train()
+            if args.mode == "load":
+                model.eval()
+            elif args.mode == "train":
+                model.train()
 
             if bnm_scheduler is not None:
                 bnm_scheduler.step(it)
@@ -209,11 +240,12 @@ def run_train(exp_name, dataset, rd_seed, holdout_perc, batch_size,
             optimizer.zero_grad()
 
             preds, loss, eval_res = model_fn(model, batch, results_folder=results_folder)
+            if args.mode != "load":
 
-            loss.backward()
-            optimizer.step()
-            if lr_scheduler is not None:
-                lr_scheduler.step(it)
+                loss.backward()
+                optimizer.step()
+                if lr_scheduler is not None:
+                    lr_scheduler.step(it)
             it += 1
 
             if (it % eval_frequency) == 0:
@@ -288,10 +320,21 @@ if __name__ == "__main__":
     parser.add_argument('-le', '--load_epoch', default=None, type=int)
     parser.add_argument('-rd', '--rd_seed', default=42, type=int)
     parser.add_argument('-ho', '--holdout_perc', default = .1, type = float)
+    parser.add_argument('-oc', '--one_class', default = True, type = bool)
+    parser.add_argument('-ti', '--train_idx',
+                        default="model_output/1class/train_idx.txt", type =str)
+    parser.add_argument('-si', '--test_idx',
+                        default="model_output/1class/test_idx.txt", type=str)
+
 
     args = parser.parse_args()
     if args.mode == "load":
-        pass
+        if not args.load_epoch:
+            raise IOError
+        run_train(
+            args.exp_name, args.dataset, args.rd_seed, args.holdout_perc,
+            args.batch_size, args.load_epoch
+        )
     if args.mode == "train":
         writeConfigFile(args)
         run_train(

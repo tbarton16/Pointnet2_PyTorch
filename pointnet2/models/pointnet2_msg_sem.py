@@ -42,7 +42,9 @@ def isfinite(x):
 def model_fn_decorator(criterion):
     ModelReturn = namedtuple("ModelReturn", ["preds", "loss", "acc"])
 
-    def model_fn(model, data, epoch=0, eval=False, pfx="", results_folder=""):
+    def model_fn(model, data, epoch=0, eval=False, pfx="", results_folder="",
+                 one_class=True):
+
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -52,19 +54,26 @@ def model_fn_decorator(criterion):
             labels = labels.to(device)
 
             preds = model(inputs)
-            preds = preds.squeeze()
-            loss = criterion(preds.view(-1), labels.view(-1))
-            if Verbose:
-                print("loss:", loss.item())
-            preds_probabilities = torch.sigmoid(preds)
-            x = torch.ones_like(preds_probabilities).to(device)
-            y = torch.zeros_like(preds_probabilities).to(device)
-            classes = torch.where(
-                preds_probabilities>torch.Tensor([0.5]).to(device), y, x)
+            if one_class:
+                preds = preds.squeeze(2)
+                loss = criterion(preds.view(-1), labels.view(-1))
+                preds_probabilities = torch.sigmoid(preds)
+                # classes is 0 if on seam, 1 if off seam
+                classes = torch.where(
+                    preds_probabilities>torch.Tensor([0.5]).to(device),
+                    torch.ones_like(preds_probabilities).to(device),
+                    torch.zeros_like(preds_probabilities).to(device))
+            else:
+                loss = criterion(preds.view(labels.numel(), -1),
+                                 labels.view(-1))
+
+                preds_probabilities = torch.nn.functional.softmax(preds, -1)
+                _, classes = torch.max(preds_probabilities, -1)
             acc = (classes == labels).float().sum() / labels.numel()
             inputs = inputs.cpu().numpy()
             labels = labels.cpu().numpy()
             index = index.numpy()
+
             # Plotting
             gt_folder_name = "eval_target" if eval else "target"
             pred_folder_name = "eval_preds" if eval else "preds"
@@ -79,26 +88,26 @@ def model_fn_decorator(criterion):
             calculate_pa(classes, dists, results_dict)
 
         if Verbose:
+            print("loss:", loss.item())
             print("acc", acc.item())
 
         return ModelReturn(preds_probabilities, loss, results_dict)
 
     return model_fn
 
-
 def calculate_pa(classes, dists, results_dict):
     results_dict["precision"] = 0.
     results_dict["recall"] = 0.
     for batch in range(classes.shape[0]):
         res = [dists[batch, i].item() for i, val in enumerate(classes[
-                                                                  batch].cpu().numpy())
-               if val == 1]
+                                                                  batch].cpu(
+
+        ).numpy()) if val == 0]
         cls = [classes[batch].cpu().numpy()[i].item() for i, val in
                enumerate(dists[batch].numpy()) if val <= low_dist]
-        cls_cor = [c for c in cls if c == 1]
+        cls_cor = [c for c in cls if c == 0]
         results_dict["precision"] += 0. if len(res) == 0 else sum(
-            res) / float(
-            len(res)) / float(classes.shape[0])
+            res) / float( len(res)) / float(classes.shape[0])
         results_dict["recall"] += 0. if len(cls) == 0 else len(
             cls_cor) / float(
             len(cls)) / float(classes.shape[0])
