@@ -14,10 +14,12 @@ from generate_fake_data import read_point_clouds
 from pointnet2.models import Pointnet2SemMSG as Pointnet
 from pointnet2.models.pointnet2_msg_sem import model_fn_decorator
 from pointnet2.data.Indoor3DSemSegLoader import Uvloader
+from pointnet2.utils import loss_functions
 import numpy as np
 import random
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 unused import
 import matplotlib.pyplot as plt
+
 
 outpath = "model_output"
 data_path = "data"
@@ -219,8 +221,11 @@ def run_train(exp_name, dataset, rd_seed, holdout_perc, batch_size,
     it = max(it, 0)  # for the initialize value of `trainer.train`
     val_it = 0
     weight = torch.tensor([.58, .42])
-    if args.one_class:
+    if args.loss_function == "one_class":
         loss_func = torch.nn.BCEWithLogitsLoss()
+    elif args.loss_function == "pr":
+        PRLoss = loss_functions.PRLoss(device)
+        loss_func = PRLoss.forward_loss()
     else:
         loss_func = nn.CrossEntropyLoss(weight=weight.cuda())
 
@@ -320,7 +325,7 @@ if __name__ == "__main__":
     parser.add_argument('-le', '--load_epoch', default=None, type=int)
     parser.add_argument('-rd', '--rd_seed', default=42, type=int)
     parser.add_argument('-ho', '--holdout_perc', default = .1, type = float)
-    parser.add_argument('-oc', '--one_class', default = True, type = bool)
+    parser.add_argument('-lf', '--loss_function', default="pr", type = str)
     parser.add_argument('-ti', '--train_idx',
                         default="model_output/1class/train_idx.txt", type =str)
     parser.add_argument('-si', '--test_idx',

@@ -43,7 +43,7 @@ def model_fn_decorator(criterion):
     ModelReturn = namedtuple("ModelReturn", ["preds", "loss", "acc"])
 
     def model_fn(model, data, epoch=0, eval=False, pfx="", results_folder="",
-                 one_class=True):
+                 loss_function=None):
 
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -52,10 +52,15 @@ def model_fn_decorator(criterion):
             inputs, labels, dists, index = data
             inputs = inputs.to(device)
             labels = labels.to(device)
+            dists = dists.to(device)
 
             preds = model(inputs)
-            if one_class:
+            if loss_function=="one_class":
                 preds = preds.squeeze(2)
+                dists /= torch.max(dists)
+                seam_probs = torch.ones_like(dists).to(device) - dists
+                plot_points(f"{results_folder}/points/probs",
+                            inputs, labels, seam_probs, index)
                 loss = criterion(preds.view(-1), labels.view(-1))
                 preds_probabilities = torch.sigmoid(preds)
                 # classes is 0 if on seam, 1 if off seam
@@ -63,6 +68,8 @@ def model_fn_decorator(criterion):
                     preds_probabilities>torch.Tensor([0.5]).to(device),
                     torch.ones_like(preds_probabilities).to(device),
                     torch.zeros_like(preds_probabilities).to(device))
+            elif loss_function=="pr":
+                fscore = criterion()
             else:
                 loss = criterion(preds.view(labels.numel(), -1),
                                  labels.view(-1))
